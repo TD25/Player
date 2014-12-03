@@ -1,6 +1,7 @@
 // PlayerMain.cpp
 // Tadas V.	2014.11.30
 
+#include <assert.h>
 // For compilers that support precompilation, includes "wx/wx.h".
 #include "wx/wxprec.h"
 
@@ -13,6 +14,9 @@
 #ifndef WX_PRECOMP
     #include "wx/wx.h"
 #endif
+
+//constants
+const int maxSliderVal = 100;
 
 //#include "wx/mediactrl.h"
 
@@ -48,14 +52,15 @@ class PlayerFrame : public wxFrame
 {
 public:
     // ctor(s)
-    PlayerFrame(const wxString& title, wxPoint &point, wxSize &size);
-
+    PlayerFrame(const wxString& title, wxPoint & pos, wxSize & size);
     // event handlers (these functions should _not_ be virtual)
     void OnQuit(wxCommandEvent& event);
     void OnAbout(wxCommandEvent& event);
-
+	void AddLib(wxString label);
 private:
     // any class wishing to process wxWidgets events must use this macro
+	wxPanel * mPanel;	//main panel
+	wxPanel * mLibsPanel;
     wxDECLARE_EVENT_TABLE();
 };
 
@@ -67,14 +72,21 @@ private:
 enum
 {
     // menu items
-    Minimal_Quit = wxID_EXIT,
+    QUIT = wxID_EXIT,
 
     // it is important for the id corresponding to the "About" command to have
     // this standard value as otherwise it won't be handled properly under Mac
     // (where it is special and put into the "Apple" menu)
-    Minimal_About = wxID_ABOUT
+    ABOUT = wxID_ABOUT,
+	
+	//panel id's
+	CTRL_PLAY = wxID_HIGHEST+1,
+	CTRL_FORWARD,
+	CTRL_REVERSE, 
+	CTRL_SEARCH,
+	CTRL_SLIDER,
+	PANEL_LIBS,
 };
-
 // ----------------------------------------------------------------------------
 // event tables and other macros for wxWidgets
 // ----------------------------------------------------------------------------
@@ -83,8 +95,8 @@ enum
 // handlers) which process them. It can be also done at run-time, but for the
 // simple menu events like this the static method is much simpler.
 wxBEGIN_EVENT_TABLE(PlayerFrame, wxFrame)
-    EVT_MENU(Minimal_Quit,  PlayerFrame::OnQuit)
-    EVT_MENU(Minimal_About, PlayerFrame::OnAbout)
+    EVT_MENU(QUIT,  PlayerFrame::OnQuit)
+    EVT_MENU(ABOUT, PlayerFrame::OnAbout)
 wxEND_EVENT_TABLE()
 
 // Create a new application object: this macro will allow wxWidgets to create
@@ -145,9 +157,9 @@ PlayerFrame::PlayerFrame(const wxString& title, wxPoint &pos, wxSize &size)
 
     // the "About" item should be in the help menu
     wxMenu *helpMenu = new wxMenu;
-    helpMenu->Append(Minimal_About, "&About\tF1", "Show about dialog");
+    helpMenu->Append(ABOUT, "&About\tF1", "Show about dialog");
 
-    fileMenu->Append(Minimal_Quit, "E&xit\tAlt-X", "Quit this program");
+    fileMenu->Append(QUIT, "E&xit\tAlt-X", "Quit this program");
 
     // now append the freshly created menu to the menu bar...
     wxMenuBar *menuBar = new wxMenuBar();
@@ -156,13 +168,53 @@ PlayerFrame::PlayerFrame(const wxString& title, wxPoint &pos, wxSize &size)
 
     // ... and attach this menu bar to the frame
     SetMenuBar(menuBar);
-#endif // wxUSE_MENUS
+#endif // wxUSE_MENUSB
 
 #if wxUSE_STATUSBAR
     // create a status bar just for fun (by default with 1 pane only)
     CreateStatusBar(2);
     SetStatusText("Welcome to wxWidgets!");
 #endif // wxUSE_STATUSBAR
+
+	//create panel and assign it buttons
+	mPanel = new wxPanel(this, wxID_ANY, pos, size);
+	mPanel->SetBackgroundColour(wxTheColourDatabase->Find("DARK GREY"));
+
+	wxPoint btPos(10, 10);
+	wxSize rBtSize(50, 50);
+	wxSize btSize = rBtSize;
+	wxButton * backBt = new wxButton(mPanel, CTRL_REVERSE, "<<",
+			btPos, btSize);
+	btPos.x += btSize.x;
+	wxButton * playBt = new wxButton(mPanel, CTRL_PLAY, ">", 
+			btPos, btSize);
+	btPos.x += btSize.x;
+	wxButton * forwardBt = new wxButton(mPanel, CTRL_FORWARD, ">>",
+			btPos, btSize);
+	btPos.x += btSize.x + 20;
+	btPos.y += 10;
+	wxSlider * slider = new wxSlider(mPanel, CTRL_SLIDER, 0, 0,
+		   	maxSliderVal, btPos, wxSize(100, 20));
+	btPos.x = size.x - 200;
+	btSize.y = 50;
+	btSize.x = 200;
+	wxTextCtrl * searchBox = new wxTextCtrl(mPanel, CTRL_SEARCH, "search",
+			btPos, btSize);
+	
+	//make panel where libs are chosen
+	btPos.x = 0;
+	btPos.y = rBtSize.y + 20;
+	btSize.x = size.x;
+	btSize.y = 25;
+	mLibsPanel = new wxPanel(mPanel, PANEL_LIBS, btPos, btSize);
+	mLibsPanel->SetBackgroundColour(wxTheColourDatabase->Find("DIM GREY"));
+	
+	btPos.x = 10;
+	btPos.y = 5;
+	btSize.x = 15;
+	btSize.y = 15;
+	AddLib("Music");
+
 }
 
 
@@ -188,5 +240,17 @@ void PlayerFrame::OnAbout(wxCommandEvent& WXUNUSED(event))
                  "About wxWidgets minimal sample",
                  wxOK | wxICON_INFORMATION,
                  this);
+}
+
+void PlayerFrame::AddLib(wxString label)
+{
+	static int libCount = 0;
+	static wxPoint pos(10, 0);
+	static wxSize size(25, 25);
+	pos.x += libCount * size.x + 5;
+	//TODO: add bitmap
+	wxButton * button = new wxButton(mLibsPanel, wxID_ANY, label,
+			pos, size);
+	libCount++;
 }
 

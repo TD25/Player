@@ -2,6 +2,7 @@ cmake_minimum_required(VERSION 2.6.2)
  
 #our project is called Player for now 
 project(Player)
+
  
 # Location where cmake first looks for cmake modules.
 set(CMAKE_MODULE_PATH "${PROJECT_SOURCE_DIR}")
@@ -49,3 +50,5 @@ add_executable(Player WIN32 ${SRCS})
 # set for us by the find script. If you need other libraries, you
 # can add them here as well. 
 target_link_libraries(Player ${wxWidgets_LIBRARIES})
+
+set( CMAKE_EXPORT_COMPILE_COMMANDS 1 )
