@@ -15,6 +15,8 @@
     #include "wx/wx.h"
 #endif
 
+#include "checkedlistctrl.h"
+
 //constants
 const int maxSliderVal = 100;
 
@@ -59,8 +61,11 @@ public:
 	void AddLib(wxString label);
 private:
     // any class wishing to process wxWidgets events must use this macro
-	wxPanel * mPanel;	//main panel
 	wxPanel * mLibsPanel;
+	wxBoxSizer * mLibsSizer;
+	wxCheckedListCtrl * mList;
+	wxListBox * mPlayLists;
+//	wxBoxSizer * mSizer1;
     wxDECLARE_EVENT_TABLE();
 };
 
@@ -86,6 +91,8 @@ enum
 	CTRL_SEARCH,
 	CTRL_SLIDER,
 	PANEL_LIBS,
+	CTRL_LIST,
+	CTRL_PLAYLISTS,
 };
 // ----------------------------------------------------------------------------
 // event tables and other macros for wxWidgets
@@ -125,7 +132,7 @@ bool PlayerApp::OnInit()
     // create the main application window
 	int xScreen = wxSystemSettings::GetMetric(wxSYS_SCREEN_X);
 	int yScreen = wxSystemSettings::GetMetric(wxSYS_SCREEN_Y);
-	wxSize size = wxSize(xScreen*2.5/4, yScreen *2.5/4);
+	wxSize size = wxSize(xScreen*2.5/5, yScreen *2.5/4);
 	wxPoint pos = wxPoint(xScreen/4.5,
 		   	yScreen/4.5);
     PlayerFrame *frame = new PlayerFrame("Player", pos, size);
@@ -176,37 +183,61 @@ PlayerFrame::PlayerFrame(const wxString& title, wxPoint &pos, wxSize &size)
     SetStatusText("Welcome to wxWidgets!");
 #endif // wxUSE_STATUSBAR
 
+
+	wxBoxSizer * mainSizer = new wxBoxSizer(wxVERTICAL);
+	wxBoxSizer * sizer1 = new wxBoxSizer(wxHORIZONTAL);
 	//create panel and assign it buttons
-	mPanel = new wxPanel(this, wxID_ANY, pos, size);
-	mPanel->SetBackgroundColour(wxTheColourDatabase->Find("DARK GREY"));
+	
+	SetBackgroundColour(wxTheColourDatabase->Find("DARK GREY"));
+
+	wxPanel * panel1 = new wxPanel(this, wxID_ANY, 
+			wxPoint(10, 10), wxSize(size.y, 50));
+	panel1->SetBackgroundColour(wxTheColourDatabase->Find("DARK GREY"));
 
 	wxPoint btPos(10, 10);
 	wxSize rBtSize(50, 50);
 	wxSize btSize = rBtSize;
-	wxButton * backBt = new wxButton(mPanel, CTRL_REVERSE, "<<",
+
+	wxButton * backBt = new wxButton(panel1, CTRL_REVERSE, "<<",
 			btPos, btSize);
+	sizer1->AddSpacer(10);
+	sizer1->Add(backBt, 1, wxALIGN_CENTER);
 	btPos.x += btSize.x;
-	wxButton * playBt = new wxButton(mPanel, CTRL_PLAY, ">", 
+	wxButton * playBt = new wxButton(panel1, CTRL_PLAY, ">", 
 			btPos, btSize);
+	sizer1->Add(playBt, 1, wxALIGN_CENTER);
 	btPos.x += btSize.x;
-	wxButton * forwardBt = new wxButton(mPanel, CTRL_FORWARD, ">>",
+	wxButton * forwardBt = new wxButton(panel1, CTRL_FORWARD, ">>",
 			btPos, btSize);
+	sizer1->Add(forwardBt, 1, wxALIGN_CENTER);
 	btPos.x += btSize.x + 20;
 	btPos.y += 10;
-	wxSlider * slider = new wxSlider(mPanel, CTRL_SLIDER, 0, 0,
+	sizer1->AddSpacer(10);
+	wxSlider * slider = new wxSlider(panel1, CTRL_SLIDER, 0, 0,
 		   	maxSliderVal, btPos, wxSize(100, 20));
+	sizer1->Add(slider, 4, wxALIGN_CENTER);
+	sizer1->AddStretchSpacer(5);
 	btPos.x = size.x - 200;
-	btSize.y = 50;
+	btSize.y = 25;
 	btSize.x = 200;
-	wxTextCtrl * searchBox = new wxTextCtrl(mPanel, CTRL_SEARCH, "search",
+	wxTextCtrl * searchBox = new wxTextCtrl(panel1, CTRL_SEARCH, "search",
 			btPos, btSize);
+	sizer1->Add(searchBox, 4, wxALIGN_CENTER);
+	
+	panel1->SetSizerAndFit(sizer1);
+
+//	mainSizer->Add(sizer1, 0, wxEXPAND);
+	mainSizer->AddSpacer(10);
+	mainSizer->Add(panel1, 0, wxEXPAND | wxALIGN_CENTER_VERTICAL);
+	SetSizer(mainSizer);
 	
 	//make panel where libs are chosen
 	btPos.x = 0;
 	btPos.y = rBtSize.y + 20;
 	btSize.x = size.x;
 	btSize.y = 25;
-	mLibsPanel = new wxPanel(mPanel, PANEL_LIBS, btPos, btSize);
+	mLibsPanel = new wxPanel(this, PANEL_LIBS, btPos, btSize);
+	mLibsSizer = new wxBoxSizer(wxHORIZONTAL);
 	mLibsPanel->SetBackgroundColour(wxTheColourDatabase->Find("DIM GREY"));
 	
 	btPos.x = 10;
@@ -214,6 +245,43 @@ PlayerFrame::PlayerFrame(const wxString& title, wxPoint &pos, wxSize &size)
 	btSize.x = 15;
 	btSize.y = 15;
 	AddLib("Music");
+	mainSizer->AddSpacer(10);
+	mainSizer->Add(mLibsPanel, 0);
+
+	AddLib("Video");
+	AddLib("Pictures");
+
+	//make playLists and media list panels
+	//media list
+	wxBoxSizer * sizer2 = new wxBoxSizer(wxHORIZONTAL);
+	wxPanel * panel2 = new wxPanel(this, wxID_ANY, wxPoint(0, size.y-40),
+			wxSize(size.x, size.y-40));
+	panel2->SetBackgroundColour(wxTheColourDatabase->Find("DARK GREY"));
+
+	//playlists
+	mPlayLists = new wxListBox(panel2, CTRL_PLAYLISTS, wxPoint(0, 0),
+			wxSize(size.x/5, size.y),0, NULL, wxLB_SINGLE | wxLB_NEEDED_SB |
+			wxLB_HSCROLL);
+	sizer2->Add(mPlayLists, 1, wxEXPAND);
+	wxString items[5] = {"item1", "item2", "item3", "item4", "item5"};
+	mPlayLists->InsertItems(5, items, 0);
+
+
+	mList = new wxCheckedListCtrl(panel2, CTRL_LIST, wxPoint(0, 0),
+			wxSize(size.x, size.y - 40), wxLC_REPORT | wxLC_HRULES | 
+			wxLC_VRULES);
+
+	mList->AppendColumn(wxT("Name"), wxLIST_FORMAT_LEFT, size.x / 4);     
+	mList->AppendColumn(wxT("Artist"), wxLIST_FORMAT_LEFT, size.x/4);
+	mList->InsertItem(0, "ABC");
+	mList->Check(0, FALSE);
+	mList->InsertItem(1, "DEF");
+	mList->Check(1, TRUE);
+	sizer2->AddSpacer(10);
+	sizer2->Add(mList, 8, wxEXPAND);
+	panel2->SetSizerAndFit(sizer2);
+	mainSizer->AddSpacer(10);
+	mainSizer->Add(panel2, 10, wxEXPAND);
 
 }
 
@@ -252,5 +320,7 @@ void PlayerFrame::AddLib(wxString label)
 	wxButton * button = new wxButton(mLibsPanel, wxID_ANY, label,
 			pos, size);
 	libCount++;
+	mLibsSizer->AddSpacer(10);
+	mLibsSizer->Add(button, 0, wxSHAPED);
+	mLibsPanel->SetSizerAndFit(mLibsSizer);
 }
-

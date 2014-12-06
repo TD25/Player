@@ -29,7 +29,7 @@ include( "${wxWidgets_USE_FILE}" )
  
 # For convenience we define the sources as a variable. You can add 
 # header files and cpp/c files and CMake will sort them out
-set(SRCS PlayerMain.cpp)
+set(SRCS PlayerMain.cpp checkedlistctrl.cpp)
  
 # If we build for windows systems, we also include the resource file
 #containing the manifest, icon and other resources
