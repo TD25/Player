@@ -29,7 +29,9 @@ include( "${wxWidgets_USE_FILE}" )
  
 # For convenience we define the sources as a variable. You can add 
 # header files and cpp/c files and CMake will sort them out
-set(SRCS PlayerMain.cpp checkedlistctrl.cpp)
+set(SRCS PlayerMain.cpp checkedlistctrl.cpp FileManager.cpp)
+
+add_definitions(-std=gnu++11 -pthread)
  
 # If we build for windows systems, we also include the resource file
 #containing the manifest, icon and other resources
@@ -41,9 +43,16 @@ if(WIN32)
 	add_definitions(-static)
 endif(WIN32)
 	
+set(DEBUG ON CACHE BOOL "Load debug symbols or not") 
+
+if (${DEBUG} STREQUAL ON)
+	message(STATUS "enabling debugging flag")
+	add_definitions(-g)
+endif(${DEBUG} STREQUAL ON)
  
 # Here we define the executable minimal.exe or minimal on other systems
 # the above paths and defines will be used in this build
+
 add_executable(Player WIN32 ${SRCS})
  
 # We add to our target 'minimal' the wxWidgets libraries. These are

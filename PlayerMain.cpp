@@ -1,13 +1,20 @@
 // PlayerMain.cpp
 // Tadas V.	2014.11.30
 
+#include "wx/thread.h"
 #include <assert.h>
+#include "MyException.h"
+#include "PlayerFrame.h"
+#include "FileManager.h"
+#include <fstream>
+#include "wx/log.h"
 // For compilers that support precompilation, includes "wx/wx.h".
 #include "wx/wxprec.h"
 
 #ifdef __BORLANDC__
     #pragma hdrstop
 #endif
+
 
 // for all others, include the necessary headers (this file is usually all you
 // need because it includes almost all "standard" wxWidgets headers)
@@ -35,38 +42,31 @@ const int maxSliderVal = 100;
 // ----------------------------------------------------------------------------
 // private classes
 // ----------------------------------------------------------------------------
+//function which called on new file and forward it to PlayerApp
+
 
 // Define a new application type, each program should derive a class from wxApp
 class PlayerApp : public wxApp
 {
+private:
+	FileManager mFManager;
+	PlayerFrame * mFrame;
 public:
     // override base class virtuals
     // ----------------------------
-
     // this one is called on application startup and is a good place for the app
     // initialization (doing it here and not in the ctor allows to have an error
     // return: if OnInit() returns false, the application terminates)
     virtual bool OnInit();
-};
-
-// Define a new frame type: this is going to be our main frame
-class PlayerFrame : public wxFrame
-{
-public:
-    // ctor(s)
-    PlayerFrame(const wxString& title, wxPoint & pos, wxSize & size);
-    // event handlers (these functions should _not_ be virtual)
-    void OnQuit(wxCommandEvent& event);
-    void OnAbout(wxCommandEvent& event);
-	void AddLib(wxString label);
-private:
-    // any class wishing to process wxWidgets events must use this macro
-	wxPanel * mLibsPanel;
-	wxBoxSizer * mLibsSizer;
-	wxCheckedListCtrl * mList;
-	wxListBox * mPlayLists;
-//	wxBoxSizer * mSizer1;
-    wxDECLARE_EVENT_TABLE();
+	//functions to handle exceptions
+	virtual bool OnExceptionInMainLoop();
+	virtual void OnUnhandledException();
+	void AddLib(wxString name, wxString extensions[], int nExt, 
+			wxString columns[] = NULL, int n = 0);
+	void Close()
+	{
+		mFManager.StopSearch();
+	}
 };
 
 // ----------------------------------------------------------------------------
@@ -102,9 +102,17 @@ enum
 // handlers) which process them. It can be also done at run-time, but for the
 // simple menu events like this the static method is much simpler.
 wxBEGIN_EVENT_TABLE(PlayerFrame, wxFrame)
+	EVT_CLOSE(PlayerFrame::OnClose)
     EVT_MENU(QUIT,  PlayerFrame::OnQuit)
     EVT_MENU(ABOUT, PlayerFrame::OnAbout)
+   	EVT_COMMAND(wxID_ANY, EVT_SEARCHER_UPDATE, PlayerFrame::OnNewItem)
+	EVT_COMMAND(wxID_ANY, EVT_SEARCHER_COMPLETE, 
+			PlayerFrame::OnSearchCompletion)
 wxEND_EVENT_TABLE()
+
+//define events sent by worker threads
+wxDEFINE_EVENT(EVT_SEARCHER_COMPLETE, wxThreadEvent);
+wxDEFINE_EVENT(EVT_SEARCHER_UPDATE, ListUpdateEv);
 
 // Create a new application object: this macro will allow wxWidgets to create
 // the application object during program execution (it's better than using a
@@ -135,11 +143,27 @@ bool PlayerApp::OnInit()
 	wxSize size = wxSize(xScreen*2.5/5, yScreen *2.5/4);
 	wxPoint pos = wxPoint(xScreen/4.5,
 		   	yScreen/4.5);
-    PlayerFrame *frame = new PlayerFrame("Player", pos, size);
+    mFrame = new PlayerFrame("Player", pos, size);
 
     // and show it (the frames, unlike simple controls, are not shown when
     // created initially)
-    frame->Show(true);
+    mFrame->Show(true);
+
+	//add libs and start searching
+	wxString extensions[5] = {"mp3", "wav", "flac", "aac", "wma"};
+	AddLib("Music", extensions, 5);
+	
+	mFManager.SetFrame(mFrame);
+	wxLogStatus(mFrame, "Searching...");
+	mFManager.Search();
+//	wxString vidExtensions[5] = {".mp4", ".avi", ".flv", ".wmv", ".mov"};
+//	AddLib("Video", vidExtensions, 5);
+//	//TODO: add more image formats
+//	wxString picExtensions[5] = {".bmp", ".gif", ".jpeg", ".png", ".tif"};
+//	AddLib("Pictures", picExtensions, 5);
+//	set library to which's new files we are notified as they are found
+	
+//	const Playlist * pl = mFManager.GetPlaylist("Music", "all");
 
     // success: wxApp::OnRun() will be called which will enter the main message
     // loop and the application will run. If we returned false here, the
@@ -147,8 +171,6 @@ bool PlayerApp::OnInit()
     return true;
 }
 
-// ----------------------------------------------------------------------------
-// main frame
 // ----------------------------------------------------------------------------
 
 // frame constructor
@@ -244,12 +266,8 @@ PlayerFrame::PlayerFrame(const wxString& title, wxPoint &pos, wxSize &size)
 	btPos.y = 5;
 	btSize.x = 15;
 	btSize.y = 15;
-	AddLib("Music");
 	mainSizer->AddSpacer(10);
 	mainSizer->Add(mLibsPanel, 0);
-
-	AddLib("Video");
-	AddLib("Pictures");
 
 	//make playLists and media list panels
 	//media list
@@ -259,25 +277,26 @@ PlayerFrame::PlayerFrame(const wxString& title, wxPoint &pos, wxSize &size)
 	panel2->SetBackgroundColour(wxTheColourDatabase->Find("DARK GREY"));
 
 	//playlists
-	mPlayLists = new wxListBox(panel2, CTRL_PLAYLISTS, wxPoint(0, 0),
-			wxSize(size.x/5, size.y),0, NULL, wxLB_SINGLE | wxLB_NEEDED_SB |
-			wxLB_HSCROLL);
-	sizer2->Add(mPlayLists, 1, wxEXPAND);
-	wxString items[5] = {"item1", "item2", "item3", "item4", "item5"};
-	mPlayLists->InsertItems(5, items, 0);
+//	mPlayLists = new wxListBox(panel2, CTRL_PLAYLISTS, wxPoint(0, 0),
+//			wxSize(size.x/5, size.y),0, NULL, wxLB_SINGLE | wxLB_NEEDED_SB |
+//			wxLB_HSCROLL);
+//	sizer2->Add(mPlayLists, 1, wxEXPAND);
+//	wxString items[5] = {"item1", "item2", "item3", "item4", "item5"};
+//	mPlayLists->InsertItems(5, items, 0);
 
-
+	//media list
 	mList = new wxCheckedListCtrl(panel2, CTRL_LIST, wxPoint(0, 0),
 			wxSize(size.x, size.y - 40), wxLC_REPORT | wxLC_HRULES | 
 			wxLC_VRULES);
 
-	mList->AppendColumn(wxT("Name"), wxLIST_FORMAT_LEFT, size.x / 4);     
-	mList->AppendColumn(wxT("Artist"), wxLIST_FORMAT_LEFT, size.x/4);
-	mList->InsertItem(0, "ABC");
-	mList->Check(0, FALSE);
-	mList->InsertItem(1, "DEF");
-	mList->Check(1, TRUE);
-	sizer2->AddSpacer(10);
+	mList->AppendColumn(wxT("Name"), wxLIST_FORMAT_LEFT, size.x / 1.5);     
+	mList->AppendColumn(wxT("Size"), wxLIST_FORMAT_LEFT, size.x/8);
+//	mList->InsertItem(0, "ABC");
+//	mList->Check(0, FALSE);
+//	mList->InsertItem(1, "DEF");
+//	mList->Check(1, TRUE);
+//	sizer2->AddSpacer(10);
+
 	sizer2->Add(mList, 8, wxEXPAND);
 	panel2->SetSizerAndFit(sizer2);
 	mainSizer->AddSpacer(10);
@@ -310,7 +329,7 @@ void PlayerFrame::OnAbout(wxCommandEvent& WXUNUSED(event))
                  this);
 }
 
-void PlayerFrame::AddLib(wxString label)
+void PlayerFrame::AddLib(wxString label, wxString columns[], int n)
 {
 	static int libCount = 0;
 	static wxPoint pos(10, 0);
@@ -323,4 +342,61 @@ void PlayerFrame::AddLib(wxString label)
 	mLibsSizer->AddSpacer(10);
 	mLibsSizer->Add(button, 0, wxSHAPED);
 	mLibsPanel->SetSizerAndFit(mLibsSizer);
+}
+
+bool PlayerApp::OnExceptionInMainLoop()
+{
+	wxString error;
+	try { throw; }
+
+	catch (const MyException & e)
+	{
+		wxMessageBox(e.what(), wxT("MyException"), wxICON_ERROR);
+//		wxLogError("Unexpected exception has occurred: %s", e.what());
+		if (e.type == MyException::FATAL_ERROR)
+			return false;
+		else
+			return true;
+	}
+	catch (const std::exception& e) 
+	{
+		wxMessageBox( e.what(), wxT("runtime_error"), wxICON_INFORMATION);
+//		wxLogError("Unexpected exception has occurred: %s", e.what());
+		// Exit the main loop and thus terminate the program.
+		return false;
+	}
+}
+
+void PlayerApp::OnUnhandledException()
+{
+	 OnExceptionInMainLoop();
+}
+
+void PlayerApp::AddLib(wxString name, wxString extensions[], int extN, 
+		wxString columns[], int n)
+{
+	mFManager.AddLib(MediaLibrary(name, extensions, extN));
+	mFrame->AddLib(name);		
+}
+
+
+void PlayerFrame::AddListItem(wxListItem & item)
+{
+	mList->InsertItem(item);	
+}
+
+void PlayerFrame::OnNewItem(wxCommandEvent& evt)
+{
+	ListUpdateEv * ev = dynamic_cast<ListUpdateEv*>(&evt);
+	assert(ev != NULL);
+	wxListItem item;
+	item.SetId(mList->GetItemCount());
+	item.SetText(ev->GetFile().GetFullName());
+	AddListItem(item);
+}
+
+void PlayerFrame::OnClose(wxCloseEvent & evt)
+{
+	mApp->Close();
+	Destroy();
 }
