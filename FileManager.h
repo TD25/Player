@@ -172,6 +172,7 @@ private:
 		virtual ExitCode Entry();
 		int mSearchStage;
 		wxString mFirstDir, mSecondDir;
+		bool mStopped;
 	public:
 		SearcherThread(FileManager * fMan, PlayerFrame *handler);
 		~SearcherThread();

@@ -4,7 +4,7 @@
 #include "wx/log.h"
 
 ListUpdateEv::ListUpdateEv(File file) : wxCommandEvent(EVT_SEARCHER_UPDATE),
-	mFile(file)
+	mFile(file)	
 	{}
 
 void FileManager::AddLib(MediaLibrary lib)
@@ -85,14 +85,19 @@ wxThread::ExitCode FileManager::SearcherThread::Entry()
 		throw MyException("wxDir::Traverse failed", 
 			MyException::FATAL_ERROR);
 	mSearchStage++;
+#ifndef __LINUX__
 	mDir.Open(mSecondDir);
 	n = mDir.Traverse(*this, wxEmptyString, wxDIR_DIRS | wxDIR_FILES);
 	if (n == -1)
 		throw MyException("wxDir::Traverse failed", 
 			MyException::FATAL_ERROR);
+#endif
 
-	wxQueueEvent(mHandlerFrame, 
-		new wxThreadEvent(EVT_SEARCHER_COMPLETE));
+	if (!mStopped)
+	{
+		wxQueueEvent(mHandlerFrame, 
+			new wxThreadEvent(EVT_SEARCHER_COMPLETE));
+	}
 
 	 return (wxThread::ExitCode)0; // success
 }
@@ -117,8 +122,7 @@ wxDirTraverseResult
 	}
 	else
 	{
-		wxQueueEvent(mHandlerFrame, 
-			new wxThreadEvent(EVT_SEARCHER_COMPLETE));
+		mStopped = true;	
 		return wxDIR_STOP;
 	}
 }
@@ -170,7 +174,7 @@ void FileManager::StopSearch()
 FileManager::SearcherThread::SearcherThread(
 		FileManager * fMan, PlayerFrame *handler)
 		: wxThread(wxTHREAD_DETACHED), wxDirTraverser(), mSearchStage(0),
-		mFManager(fMan)
+		mFManager(fMan), mStopped(false)
 { 
 	mHandlerFrame = handler;
 #ifdef __LINUX__

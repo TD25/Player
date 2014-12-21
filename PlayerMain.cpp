@@ -49,7 +49,7 @@ const int maxSliderVal = 100;
 class PlayerApp : public wxApp
 {
 private:
-	FileManager mFManager;
+	FileManager * mFManager;
 	PlayerFrame * mFrame;
 public:
     // override base class virtuals
@@ -63,9 +63,11 @@ public:
 	virtual void OnUnhandledException();
 	void AddLib(wxString name, wxString extensions[], int nExt, 
 			wxString columns[] = NULL, int n = 0);
-	void Close()
+	int OnExit()
 	{
-		mFManager.StopSearch();
+		mFManager->StopSearch();
+		delete mFManager;
+		return 0;
 	}
 };
 
@@ -93,6 +95,8 @@ enum
 	PANEL_LIBS,
 	CTRL_LIST,
 	CTRL_PLAYLISTS,
+	CTRL_VOL_BUTTON,
+	CTRL_VOL_SLIDER
 };
 // ----------------------------------------------------------------------------
 // event tables and other macros for wxWidgets
@@ -108,6 +112,9 @@ wxBEGIN_EVENT_TABLE(PlayerFrame, wxFrame)
    	EVT_COMMAND(wxID_ANY, EVT_SEARCHER_UPDATE, PlayerFrame::OnNewItem)
 	EVT_COMMAND(wxID_ANY, EVT_SEARCHER_COMPLETE, 
 			PlayerFrame::OnSearchCompletion)
+	EVT_BUTTON(CTRL_VOL_BUTTON, PlayerFrame::OnVolButton)
+	EVT_BUTTON(CTRL_VOL_SLIDER, PlayerFrame::OnVolume)
+	EVT_LEFT_DOWN(PlayerFrame::OnLeftDown)
 wxEND_EVENT_TABLE()
 
 //define events sent by worker threads
@@ -149,20 +156,21 @@ bool PlayerApp::OnInit()
     // created initially)
     mFrame->Show(true);
 
+	mFManager = new FileManager(mFrame);
 	//add libs and start searching
 	wxString extensions[5] = {"mp3", "wav", "flac", "aac", "wma"};
 	AddLib("Music", extensions, 5);
 	
-	mFManager.SetFrame(mFrame);
-	wxLogStatus(mFrame, "Searching...");
-	mFManager.Search();
-//	wxString vidExtensions[5] = {".mp4", ".avi", ".flv", ".wmv", ".mov"};
-//	AddLib("Video", vidExtensions, 5);
+	wxString vidExtensions[5] = {".mp4", ".avi", ".flv", ".wmv", ".mov"};
+	AddLib("Video", vidExtensions, 5);
 //	//TODO: add more image formats
-//	wxString picExtensions[5] = {".bmp", ".gif", ".jpeg", ".png", ".tif"};
-//	AddLib("Pictures", picExtensions, 5);
+	wxString picExtensions[5] = {".bmp", ".gif", ".jpeg", ".png", ".tif"};
+	AddLib("Pictures", picExtensions, 5);
+
+	wxLogStatus(mFrame, "Searching...");
+	mFManager->Search();
+
 //	set library to which's new files we are notified as they are found
-	
 //	const Playlist * pl = mFManager.GetPlaylist("Music", "all");
 
     // success: wxApp::OnRun() will be called which will enter the main message
@@ -199,11 +207,8 @@ PlayerFrame::PlayerFrame(const wxString& title, wxPoint &pos, wxSize &size)
     SetMenuBar(menuBar);
 #endif // wxUSE_MENUSB
 
-#if wxUSE_STATUSBAR
     // create a status bar just for fun (by default with 1 pane only)
     CreateStatusBar(2);
-    SetStatusText("Welcome to wxWidgets!");
-#endif // wxUSE_STATUSBAR
 
 
 	wxBoxSizer * mainSizer = new wxBoxSizer(wxVERTICAL);
@@ -235,10 +240,20 @@ PlayerFrame::PlayerFrame(const wxString& title, wxPoint &pos, wxSize &size)
 	btPos.x += btSize.x + 20;
 	btPos.y += 10;
 	sizer1->AddSpacer(10);
-	wxSlider * slider = new wxSlider(panel1, CTRL_SLIDER, 0, 0,
-		   	maxSliderVal, btPos, wxSize(100, 20));
-	sizer1->Add(slider, 4, wxALIGN_CENTER);
-	sizer1->AddStretchSpacer(5);
+	mVolButton = new wxButton(panel1, CTRL_VOL_BUTTON, "VOL",
+			btPos, wxSize(25, 25));
+	mVolPopup = new wxPopupWindow(mVolButton);
+	
+	mVolSlider = new wxSlider(mVolPopup, CTRL_VOL_SLIDER, 0, 0, maxSliderVal,
+		   wxPoint(1, 1), wxSize(20, 100), wxVERTICAL | wxSL_INVERSE);
+	
+	sizer1->Add(mVolButton, 0, wxALIGN_CENTER);
+	sizer1->AddSpacer(10);	
+	btPos.x += btSize.x + 20;
+	mSlider = new wxSlider(panel1, CTRL_SLIDER, 0, 0,
+		   	maxSliderVal, btPos, wxSize(400, 20));
+	sizer1->Add(mSlider, 6, wxALIGN_CENTER);
+	sizer1->AddSpacer(10);
 	btPos.x = size.x - 200;
 	btSize.y = 25;
 	btSize.x = 200;
@@ -251,7 +266,6 @@ PlayerFrame::PlayerFrame(const wxString& title, wxPoint &pos, wxSize &size)
 //	mainSizer->Add(sizer1, 0, wxEXPAND);
 	mainSizer->AddSpacer(10);
 	mainSizer->Add(panel1, 0, wxEXPAND | wxALIGN_CENTER_VERTICAL);
-	SetSizer(mainSizer);
 	
 	//make panel where libs are chosen
 	btPos.x = 0;
@@ -267,8 +281,7 @@ PlayerFrame::PlayerFrame(const wxString& title, wxPoint &pos, wxSize &size)
 	btSize.x = 15;
 	btSize.y = 15;
 	mainSizer->AddSpacer(10);
-	mainSizer->Add(mLibsPanel, 0);
-
+	mainSizer->Add(mLibsPanel, 0, wxEXPAND); 
 	//make playLists and media list panels
 	//media list
 	wxBoxSizer * sizer2 = new wxBoxSizer(wxHORIZONTAL);
@@ -302,6 +315,7 @@ PlayerFrame::PlayerFrame(const wxString& title, wxPoint &pos, wxSize &size)
 	mainSizer->AddSpacer(10);
 	mainSizer->Add(panel2, 10, wxEXPAND);
 
+	SetSizer(mainSizer);
 }
 
 
@@ -331,16 +345,22 @@ void PlayerFrame::OnAbout(wxCommandEvent& WXUNUSED(event))
 
 void PlayerFrame::AddLib(wxString label, wxString columns[], int n)
 {
-	static int libCount = 0;
-	static wxPoint pos(10, 0);
-	static wxSize size(25, 25);
-	pos.x += libCount * size.x + 5;
-	//TODO: add bitmap
-	wxButton * button = new wxButton(mLibsPanel, wxID_ANY, label,
-			pos, size);
-	libCount++;
-	mLibsSizer->AddSpacer(10);
-	mLibsSizer->Add(button, 0, wxSHAPED);
+	static wxVector<wxButton*> buttons;
+
+	wxSize size(GetSize().x/(buttons.size()+1), 25);
+	//resize others
+	for (int i = 0; i < buttons.size(); i++)
+	{
+		wxSizerItem * item = mLibsSizer->GetItem(buttons[i]);
+		item->SetMinSize(size);
+	}	
+	buttons.push_back(new wxButton(mLibsPanel, wxID_ANY, label, 
+				wxPoint(), size));
+	buttons.back()->SetBackgroundColour(wxTheColourDatabase->
+			Find("DARK GREY"));
+	buttons.back()->SetForegroundColour(wxTheColourDatabase->Find("WHITE"));
+	mLibsSizer->Add(buttons.back(), 1, wxALIGN_CENTER | 
+			wxALIGN_CENTER_HORIZONTAL);
 	mLibsPanel->SetSizerAndFit(mLibsSizer);
 }
 
@@ -375,7 +395,7 @@ void PlayerApp::OnUnhandledException()
 void PlayerApp::AddLib(wxString name, wxString extensions[], int extN, 
 		wxString columns[], int n)
 {
-	mFManager.AddLib(MediaLibrary(name, extensions, extN));
+	mFManager->AddLib(MediaLibrary(name, extensions, extN));
 	mFrame->AddLib(name);		
 }
 
@@ -397,6 +417,25 @@ void PlayerFrame::OnNewItem(wxCommandEvent& evt)
 
 void PlayerFrame::OnClose(wxCloseEvent & evt)
 {
-	mApp->Close();
 	Destroy();
+}
+
+void PlayerFrame::OnVolButton(wxCommandEvent& ev) 
+{
+	wxPoint p = mVolButton->GetScreenPosition();
+	p.y -= 90;
+	mVolPopup->Position(p, wxSize(5, 5));
+	mVolPopup->SetSize(wxSize(25, 100));
+	mVolPopup->Show();
+}
+
+void PlayerFrame::OnLeftDown(wxMouseEvent& ev)
+{
+	wxPoint p = ev.GetPosition();
+	p = ClientToScreen(p);
+	wxRect buttR = mVolButton->GetScreenRect();
+	wxRect sliderR = mVolButton->GetScreenRect();
+	if ((buttR.Contains(p)) && (sliderR.Contains(p)))
+		mVolPopup->Hide();
+	ev.Skip();
 }

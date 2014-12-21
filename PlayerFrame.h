@@ -3,6 +3,7 @@
 #include "wx/wx.h"
 #include "checkedlistctrl.h"
 #include "File.h"
+#include "wx/popupwin.h"
 
 class ListUpdateEv : public wxCommandEvent
 {
@@ -33,12 +34,19 @@ public:
 		wxLogStatus(this, "Search complete");
 	}
 	void OnClose(wxCloseEvent &);
+	void OnVolButton(wxCommandEvent& ev);
+	void OnVolume(wxCommandEvent& ev) {};
+	void OnLeftDown(wxMouseEvent& ev);
 private:
     // any class wishing to process wxWidgets events must use this macro
 	wxPanel * mLibsPanel;
 	wxBoxSizer * mLibsSizer;
 	wxCheckedListCtrl * mList;
 	wxListBox * mPlayLists;
+	wxSlider * mVolSlider;
+	wxPopupWindow * mVolPopup;
+	wxSlider * mSlider;
+	wxButton * mVolButton;
 //	wxBoxSizer * mSizer1;
     wxDECLARE_EVENT_TABLE();
 	PlayerApp * mApp;
