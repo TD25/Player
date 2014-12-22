@@ -1,20 +1,21 @@
 #pragma once
 
-#include "File.h"
 #include "wx/vector.h"
 #include <assert.h>
 #include "MyException.h"
 #include "wx/thread.h"
 #include "wx/event.h"
 #include "PlayerFrame.h"
+#include "wx/filename.h"
+#include "wx/dir.h"
 
 
 class Playlist
 {
 private:
 	wxString mName;
-	wxVector<File*> mFiles;
-	File * Find(wxString path)
+	wxVector<wxFileName*> mFiles;
+	wxFileName * Find(wxString path) const
 	{
 		for (int i = 0; i < mFiles.size(); i++)
 		{
@@ -23,7 +24,7 @@ private:
 		}
 		return NULL;
 	}
-	File * Find(File * file)
+	wxFileName * Find(wxFileName * file) const 
 	{
 		for (int i = 0; i < mFiles.size(); i++)
 		{
@@ -35,7 +36,7 @@ private:
 public:
 	Playlist(wxString name) : mName(name)
 	{}
-	void Add(File * file)
+	void Add(wxFileName * file)
 	{
 		assert(file != NULL); 
 		if (Find(file) != NULL)
@@ -46,20 +47,20 @@ public:
 		//	somewhere if not fatal
 		mFiles.push_back(file);
 	}
-	const wxVector<File*> * GetFiles() const 
+	const wxVector<wxFileName*> * GetFiles() const 
 	{
 		return &mFiles;
 	}
-	const File* GetFile(int id)
+	const wxFileName* GetFile(const int & id) const 
 	{
 		assert(id < mFiles.size());
 		return mFiles[id];
 	}
-	const File* GetFile(wxString name)
+	const wxFileName* GetFile(wxString name) const
 	{
 		return Find(name);
 	}
-	wxString GetName()
+	wxString GetName() const 
 	{
 		return mName;
 	}
@@ -71,7 +72,7 @@ private:
 	wxVector<wxString> mExtensions;
 	wxString mName;
 	wxVector<Playlist> mPlaylists;
-	int FindPlaylist(wxString & name)
+	int FindPlaylist(wxString & name) const
 	{
 		for (int i = 0; i < mPlaylists.size(); i++)
 		{
@@ -108,24 +109,24 @@ public:
 					MyException::NOT_FATAL);
 		mPlaylists.push_back(name);
 	}
-	void AddFile(File * file)
+	void AddFile(wxFileName * file)
 	{
 		mPlaylists[0].Add(file);
 	}
-	void AddFileToPlaylist(File * file, wxString playlistName)
+	void AddFileToPlaylist(wxFileName * file, wxString playlistName)
 	{
 		mPlaylists[0].Add(file);
 		int ind = FindPlaylist(playlistName);
 		assert(ind > -1);
 		mPlaylists[ind].Add(file);
 	}
-	const Playlist * GetPlaylist(wxString name)		
+	const Playlist * GetPlaylist(wxString name)	const
 	{
 		int ind = FindPlaylist(name);
 		assert(ind > -1);
 		return &mPlaylists[ind];
 	}
-	const Playlist * GetPlaylist(int ind)
+	const Playlist * GetPlaylist(int ind) const
 	{
 		return &mPlaylists[ind];
 	}
@@ -140,7 +141,7 @@ public:
 		return false;
 	}
 
-	wxString GetName()
+	wxString GetName() const
 	{
 		return mName;
 	}
@@ -156,9 +157,9 @@ wxDECLARE_EVENT(EVT_SEARCHER_UPDATE, ListUpdateEv);
 class FileManager 
 {
 private:
-	wxVector<File> mFiles;	//all files found
+	wxVector<wxFileName*> mFiles;	//all files found
 	wxVector<MediaLibrary> mLibs;
-	int FindLib(const wxString & name);
+	int FindLib(const wxString & name) const;
 	PlayerFrame * mHandlerFrame;
 
 	class SearcherThread : public wxThread, public wxDirTraverser
@@ -202,9 +203,11 @@ public:
 		mCurrPlaylist = playlistName;
 	}
 	const Playlist * GetPlaylist(const wxString & libName, 
-			const wxString & playlistName);
+			const wxString & playlistName) const;
 	//looks if extension of file is right
 	//returns lib index
-	int FromLib(const File & file);
-
+	int FromLib(const wxFileName & file);
+	const wxFileName * GetFile(const wxString & libName, 
+			const wxString & plName, const int & id) const;
+	~FileManager();
 };

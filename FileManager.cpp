@@ -3,8 +3,8 @@
 #include "PlayerFrame.h"
 #include "wx/log.h"
 
-ListUpdateEv::ListUpdateEv(File file) : wxCommandEvent(EVT_SEARCHER_UPDATE),
-	mFile(file)	
+ListUpdateEv::ListUpdateEv(wxFileName file) : 
+	wxCommandEvent(EVT_SEARCHER_UPDATE), mFile(file)	
 	{}
 
 void FileManager::AddLib(MediaLibrary lib)
@@ -31,7 +31,7 @@ void FileManager::AddLibs(MediaLibrary libs[], int n)
 	}
 }
 
-int FileManager::FindLib(const wxString & name)
+int FileManager::FindLib(const wxString & name) const
 {
 	for (int i = 0; i < mLibs.size(); i++)
 	{
@@ -42,7 +42,7 @@ int FileManager::FindLib(const wxString & name)
 }
 
 const Playlist * FileManager::GetPlaylist(const wxString & libName, 
-		const wxString & playlistName)
+		const wxString & playlistName) const
 {
 	int ind = FindLib(libName);
 	assert(ind > -1);
@@ -63,7 +63,7 @@ void FileManager::Search(wxString libName, wxString playlistName)
 	}
 }
 
-int FileManager::FromLib(const File & file)
+int FileManager::FromLib(const wxFileName & file)
 {
 	wxString ext = file.GetExt();
 	for (int i = 0; i < mLibs.size(); i++)
@@ -109,13 +109,13 @@ wxDirTraverseResult
 	{
 		wxCriticalSectionLocker enter(mFManagerCS);
 		wxMessageOutputDebug().Printf(filename);
-		File file(filename);
+		wxFileName file(filename);
 		//TODO add function - FromPlaylist
 		int ind = mFManager->FromLib(file);
 		if (ind > -1)
 		{
-			mFManager->mFiles.push_back(file);
-			mFManager->mLibs[ind].AddFile(&mFManager->mFiles.back());
+			mFManager->mFiles.push_back(new wxFileName(file));
+			mFManager->mLibs[ind].AddFile(mFManager->mFiles.back());
 			wxQueueEvent(mHandlerFrame, new ListUpdateEv(file));
 		}
 		return wxDIR_CONTINUE;
@@ -187,3 +187,16 @@ FileManager::SearcherThread::SearcherThread(
 #endif
 }
 
+const wxFileName * FileManager::GetFile(const wxString & libName, 
+		const wxString & plName, const int & id) const
+{
+	const Playlist * pl = GetPlaylist(libName, plName);
+	const wxFileName * file = pl->GetFile(id);
+	return file;
+}
+
+FileManager::~FileManager()
+{
+	for (int i = 0; i < mFiles.size(); i++)
+		delete mFiles[i];
+}
