@@ -3,13 +3,15 @@
 
 #include "wx/thread.h"
 #include <assert.h>
-#include "MyException.h"
+#include "Common.h"
 #include "PlayerFrame.h"
 #include "FileManager.h"
 #include "wx/log.h"
 // For compilers that support precompilation, includes "wx/wx.h".
 #include "wx/wxprec.h"
 #include "wx/mediactrl.h"
+#include "checkedlistctrl.h"
+#include "wx/dcclient.h"
 
 #ifdef __BORLANDC__
     #pragma hdrstop
@@ -69,8 +71,9 @@ public:
 		return 0;
 	}
 	void Play(const wxString & libName, const wxString & plName, 
-			const int id);
-	void MediaLoaded();
+			const int id); 
+	void Pause();
+	wxFileOffset MediaLoaded();
 	void PlayNew(const wxFileName * file);
 };
 
@@ -98,6 +101,12 @@ wxBEGIN_EVENT_TABLE(PlayerFrame, wxFrame)
 	EVT_MEDIA_STOP(MEDIA_CTRL, PlayerFrame::OnMediaStop)
 	EVT_MEDIA_FINISHED(MEDIA_CTRL, PlayerFrame::OnMediaFinish)
 	EVT_BUTTON(CTRL_PLAY, PlayerFrame::OnPlayBt)
+	EVT_LIST_ITEM_ACTIVATED(CTRL_LIST, PlayerFrame::OnListActivated)
+	EVT_LIST_ITEM_CHECKED(CTRL_LIST, PlayerFrame::OnChecked)
+	EVT_LIST_ITEM_UNCHECKED(CTRL_LIST, PlayerFrame::OnUnchecked)
+	EVT_LIST_ITEM_SELECTED(CTRL_LIST, PlayerFrame::OnSelected)
+	EVT_LIST_ITEM_DESELECTED(CTRL_LIST, PlayerFrame::OnDeselected)
+	EVT_TIMER(-1, PlayerFrame::OnTimer)
 wxEND_EVENT_TABLE()
 
 //define events sent by worker threads
@@ -139,9 +148,17 @@ bool PlayerApp::OnInit()
     // created initially)
     mFrame->Show(true);
 	mMediaCtrl = new wxMediaCtrl;
+
+#ifdef __WINDOWS__ //because default doesn't work for some reason
+	if (!mMediaCtrl->Create(mFrame, MEDIA_CTRL, wxEmptyString, 
+		wxDefaultPosition, wxDefaultSize, 0, wxMEDIABACKEND_WMP10))
+		throw MyException("Can't create wxMediaCtrl", 
+				MyException::FATAL_ERROR);
+#else 
 	if (!mMediaCtrl->Create(mFrame, MEDIA_CTRL))
 		throw MyException("Can't create wxMediaCtrl", 
 				MyException::FATAL_ERROR);
+#endif //__WINDOWS__
 
 	mFManager = new FileManager(mFrame);
 	//add libs and start searching
@@ -208,13 +225,21 @@ void PlayerApp::Play(const wxString & libName, const wxString & plName,
 {
 
 	const wxFileName * file = mFManager->GetFile(libName, plName, id);	
-	mFrame->ShiftPlayBt();
-	if (mMediaCtrl->GetState() == wxMEDIASTATE_PLAYING) 
-		mMediaCtrl->Pause();
+	if (mMediaCtrl->GetState() == wxMEDIASTATE_PLAYING)
+	{
+		if (*file == mPlayedFile)
+			throw MyException("Tried to play, but already playing",
+				MyException::NOT_FATAL);
+		else
+			PlayNew(file);
+	}
 	else if (mMediaCtrl->GetState() == wxMEDIASTATE_PAUSED)
 	{
 		if (mPlayedFile == *file)
+		{
 			mMediaCtrl->Play();
+			mFrame->ShiftPlayBt(true);
+		}
 		else
 			PlayNew(file);
 	}
@@ -223,25 +248,94 @@ void PlayerApp::Play(const wxString & libName, const wxString & plName,
 
 }
 
-void PlayerApp::MediaLoaded()
+wxFileOffset PlayerApp::MediaLoaded()
 {
 	mMediaCtrl->Play();	
+	mFrame->ShiftPlayBt(true);
+	return mMediaCtrl->Length();
 }
 
 void PlayerFrame::OnMediaLoaded(wxMediaEvent& ev)
 {
-	mApp->MediaLoaded();
+	wxFileOffset lenght = mApp->MediaLoaded();
+	wxString name = mList->GetItemText(GetCurrSelection(), 0);
+	wxClientDC dc(mMediaCtrlsPanel);
+	dc.DrawText(name, mNamePos);
+	mSliderTimer.Start(wxFileOffset(1000)/lenght);
+//	for (int i = 1; i < mSelectedItems.size(); i++)
+//		Deselect(mSelectedItems[i]);
+//	Select(GetCurrSelection());
 }
+
 
 void PlayerFrame::OnPlayBt(wxCommandEvent& ev)
 {
-	mApp->Play(mLibNames[mActiveLib], "all", 1);
+	if (mPlayBt->GetLabel() == ">")
+		mApp->Play(mLibNames[mActiveLib], "all", GetCurrSelection());
+	else
+	{
+		mSliderTimer.Stop();
+		mApp->Pause();
+	}
 }
 
 void PlayerApp::PlayNew(const wxFileName * file)
 {
 	wxString path = file->GetFullPath();
-	mMediaCtrl->Load(path);
+	if (!mMediaCtrl->Load(path))
+		throw MyException("Failed to load file in PlayerApp::PlayNew()",
+				MyException::NOT_FATAL);
 	mPlayedFile = *file;
+}
+
+void PlayerFrame::OnListActivated(wxListEvent& ev)
+{
+	mApp->Play(mLibNames[mActiveLib], "all", ev.GetIndex());
+}
+
+void PlayerApp::Pause()
+{
+	if (mMediaCtrl->GetState() == wxMEDIASTATE_PLAYING)
+	{
+		mMediaCtrl->Pause();
+		mFrame->ShiftPlayBt(false);
+	}
+	else
+		throw MyException("Tried to pause altough is not playing",
+				MyException::NOT_FATAL);
+}
+
+void PlayerFrame::OnMediaFinish(wxMediaEvent& ev)
+{
+	mSliderTimer.Stop();
+	if (mSelectedItems.size() > 0)
+	{
+		mList->Check(mSelectedItems[0], false);
+		int i = Find(mCheckedItems, mSelectedItems[0]);
+		mSelectedItems.erase(mSelectedItems.begin());
+		if (i != -1)
+		{
+			mList->Check(mCheckedItems[i], false);
+			mCheckedItems.erase(mCheckedItems.begin() + i);
+		}
+	}
+	else if (mCheckedItems.size() > 0)
+	{
+		mList->Check(mCheckedItems[0], false);
+		mCheckedItems.erase(mCheckedItems.begin());
+	}
+	else
+		throw MyException("Something wrong...:PlayerFrame::OnMediaFinish()",
+				MyException::NOT_FATAL);
+	try
+	{
+		int ind = GetCurrSelection();
+		mApp->Play(mLibNames[mActiveLib], "all", ind);
+	}
+	catch (MyException & exc)
+	{
+		ShiftPlayBt(false);
+		return;
+	}
 }
 

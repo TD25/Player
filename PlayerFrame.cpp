@@ -1,13 +1,14 @@
 #include "PlayerFrame.h"
+#include "Common.h"
 
 //constants
-const int maxSliderVal = 100;
+const int maxSliderVal = 1000;
 
 // frame constructor
 PlayerFrame::PlayerFrame(const wxString& title, wxPoint &pos, 
 		wxSize &size, PlayerApp * pApp)
        : wxFrame(NULL, wxID_ANY, title, pos, size), mApp(pApp), 
-	   mActiveLib(0)
+       mActiveLib(0), mDontStoreSelection(false), mSliderTimer(this)
 {
     // set the frame icon
 //    SetIcon(wxICON(sample));
@@ -41,30 +42,31 @@ PlayerFrame::PlayerFrame(const wxString& title, wxPoint &pos,
 	
 	SetBackgroundColour(wxTheColourDatabase->Find("DARK GREY"));
 
-	wxPanel * panel1 = new wxPanel(this, wxID_ANY, 
+	mMediaCtrlsPanel = new wxPanel(this, wxID_ANY, 
 			wxPoint(10, 10), wxSize(size.y, 50));
-	panel1->SetBackgroundColour(wxTheColourDatabase->Find("DARK GREY"));
+	mMediaCtrlsPanel->SetBackgroundColour(wxTheColourDatabase->
+			Find("DARK GREY"));
 
 	wxPoint btPos(10, 10);
 	wxSize rBtSize(50, 50);
 	wxSize btSize = rBtSize;
 
-	wxButton * backBt = new wxButton(panel1, CTRL_REVERSE, "<<",
+	wxButton * backBt = new wxButton(mMediaCtrlsPanel, CTRL_REVERSE, "<<",
 			btPos, btSize);
 	sizer1->AddSpacer(10);
 	sizer1->Add(backBt, 1, wxALIGN_CENTER);
 	btPos.x += btSize.x;
-	mPlayBt = new wxButton(panel1, CTRL_PLAY, ">", 
+	mPlayBt = new wxButton(mMediaCtrlsPanel, CTRL_PLAY, ">", 
 			btPos, btSize);
 	sizer1->Add(mPlayBt, 1, wxALIGN_CENTER);
 	btPos.x += btSize.x;
-	wxButton * forwardBt = new wxButton(panel1, CTRL_FORWARD, ">>",
+	wxButton * forwardBt = new wxButton(mMediaCtrlsPanel, CTRL_FORWARD, ">>",
 			btPos, btSize);
 	sizer1->Add(forwardBt, 1, wxALIGN_CENTER);
 	btPos.x += btSize.x + 20;
 	btPos.y += 10;
 	sizer1->AddSpacer(10);
-	mVolButton = new wxButton(panel1, CTRL_VOL_BUTTON, "VOL",
+	mVolButton = new wxButton(mMediaCtrlsPanel, CTRL_VOL_BUTTON, "VOL",
 			btPos, wxSize(25, 25));
 	mVolPopup = new wxPopupTransientWindow(this);
 	wxPanel * volPanel = new wxPanel(mVolPopup, wxID_ANY,
@@ -75,22 +77,24 @@ PlayerFrame::PlayerFrame(const wxString& title, wxPoint &pos,
 	sizer1->Add(mVolButton, 0, wxALIGN_CENTER);
 	sizer1->AddSpacer(10);	
 	btPos.x += btSize.x + 20;
-	mSlider = new wxSlider(panel1, CTRL_SLIDER, 0, 0,
-		   	maxSliderVal, btPos, wxSize(400, 20));
-	sizer1->Add(mSlider, 6, wxALIGN_CENTER);
+	mSlider = new wxSlider(mMediaCtrlsPanel, CTRL_SLIDER, 0, 0,
+		   	maxSliderVal, wxPoint(btPos.x, btPos.y+5), wxSize(400, 20));
+	mNamePos.x = btPos.x;
+	mNamePos.y = 1;
+	sizer1->Add(mSlider, 6, wxALIGN_BOTTOM);
 	sizer1->AddSpacer(10);
 	btPos.x = size.x - 200;
 	btSize.y = 25;
 	btSize.x = 200;
-	wxTextCtrl * searchBox = new wxTextCtrl(panel1, CTRL_SEARCH, "search",
+	wxTextCtrl * searchBox = new wxTextCtrl(mMediaCtrlsPanel, CTRL_SEARCH, "search",
 			btPos, btSize);
 	sizer1->Add(searchBox, 4, wxALIGN_CENTER);
 	
-	panel1->SetSizerAndFit(sizer1);
+	mMediaCtrlsPanel->SetSizerAndFit(sizer1);
 
 //	mainSizer->Add(sizer1, 0, wxEXPAND);
 	mainSizer->AddSpacer(10);
-	mainSizer->Add(panel1, 0, wxEXPAND | wxALIGN_CENTER_VERTICAL);
+	mainSizer->Add(mMediaCtrlsPanel, 0, wxEXPAND | wxALIGN_CENTER_VERTICAL);
 	
 	//make panel where libs are chosen
 	btPos.x = 0;
@@ -129,11 +133,6 @@ PlayerFrame::PlayerFrame(const wxString& title, wxPoint &pos,
 
 	mList->AppendColumn(wxT("Name"), wxLIST_FORMAT_LEFT, size.x / 1.5);     
 	mList->AppendColumn(wxT("Size"), wxLIST_FORMAT_LEFT, size.x/8);
-//	mList->InsertItem(0, "ABC");
-//	mList->Check(0, FALSE);
-//	mList->InsertItem(1, "DEF");
-//	mList->Check(1, TRUE);
-//	sizer2->AddSpacer(10);
 
 	sizer2->Add(mList, 8, wxEXPAND);
 	panel2->SetSizerAndFit(sizer2);
@@ -220,10 +219,10 @@ void PlayerFrame::OnVolButton(wxCommandEvent& ev)
 	mVolPopup->Popup();
 }
 
-void PlayerFrame::ShiftPlayBt()
+void PlayerFrame::ShiftPlayBt(bool isPlaying)
 {
 	wxString curr = mPlayBt->GetLabel();
-	if (curr == ">")
+	if (isPlaying)
 		mPlayBt->SetLabel("||");
 	else
 		mPlayBt->SetLabel(">");
@@ -231,5 +230,70 @@ void PlayerFrame::ShiftPlayBt()
 
 int PlayerFrame::GetCurrSelection() const
 {
-	return 0;
+	if (mSelectedItems.size() > 0)
+	{
+		int i = mSelectedItems[0];
+		return i;
+	}
+	else if (mCheckedItems.size() > 0)
+		return mCheckedItems[0];
+	else
+		throw MyException("Nothing selected", MyException::NOT_FATAL);
+}
+
+void PlayerFrame::OnChecked(wxListEvent& ev)
+{
+	mCheckedItems.push_back(ev.GetIndex());
+}
+
+void PlayerFrame::OnUnchecked(wxListEvent& ev)
+{
+	int i = ev.GetIndex();
+	int id = Find(mCheckedItems, i);
+	if (id == -1)
+//		throw MyException("No such index: PlayerFrame::OnUnchecked()",
+//				MyException::NOT_FATAL);
+	mCheckedItems.erase(mCheckedItems.begin() + id);
+}
+
+void PlayerFrame::OnSelected(wxListEvent& ev)
+{
+	if (mDontStoreSelection)
+		return;
+	mDontStoreSelection = false;
+	int i = ev.GetIndex();
+	mSelectedItems.push_back(i);
+}
+
+void PlayerFrame::OnDeselected(wxListEvent& ev)
+{
+	int i = ev.GetIndex();
+	int id = Find(mSelectedItems, i);
+	if (id == -1)
+		return;
+//		throw MyException("No such index: PlayerFrame::OnDeselected()",
+//				MyException::NOT_FATAL);
+
+	mSelectedItems.erase(mSelectedItems.begin() + id);
+}
+
+void PlayerFrame::Select(const int & id)
+{
+	mDontStoreSelection = true;
+
+	wxListEvent * ev = new wxListEvent(wxEVT_LIST_ITEM_SELECTED);
+	ev->m_itemIndex = id;
+	wxQueueEvent(this, ev);
+}
+
+void PlayerFrame::Deselect(const int & id)
+{
+	wxListEvent * ev = new wxListEvent(wxEVT_LIST_ITEM_DESELECTED);	
+	ev->m_itemIndex = id;
+	wxQueueEvent(this, ev);
+}
+
+void PlayerFrame::OnTimer(wxTimerEvent& ev)
+{
+	mSlider->SetValue(mSlider->GetValue()+1);
 }

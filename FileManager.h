@@ -2,7 +2,7 @@
 
 #include "wx/vector.h"
 #include <assert.h>
-#include "MyException.h"
+#include "Common.h"
 #include "wx/thread.h"
 #include "wx/event.h"
 #include "PlayerFrame.h"

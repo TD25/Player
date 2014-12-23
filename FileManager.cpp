@@ -108,7 +108,7 @@ wxDirTraverseResult
 	if (!TestDestroy())
 	{
 		wxCriticalSectionLocker enter(mFManagerCS);
-		wxMessageOutputDebug().Printf(filename);
+		//wxMessageOutputDebug().Printf(filename);
 		wxFileName file(filename);
 		//TODO add function - FromPlaylist
 		int ind = mFManager->FromLib(file);

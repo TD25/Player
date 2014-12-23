@@ -5,6 +5,7 @@
 #include "wx/popupwin.h"
 #include "wx/mediactrl.h"
 #include "wx/filename.h"
+#include "wx/timer.h"
 
 // IDs for the controls and the menu commands
 enum
@@ -65,12 +66,21 @@ public:
 	void OnVolume(wxCommandEvent& ev) {};
 	void OnMediaLoaded(wxMediaEvent& ev);
 	void OnMediaStop(wxMediaEvent& ev) {}
-	void OnMediaFinish(wxMediaEvent& ev) {}
+	void OnMediaFinish(wxMediaEvent& ev);
 	void OnPlayBt(wxCommandEvent& ev);
-	void ShiftPlayBt();	//changes text (bitmap) on play button
+	void OnListActivated(wxListEvent& ev);
+	void OnSelected(wxListEvent& ev);
+	void OnDeselected(wxListEvent& ev);
+	void OnChecked(wxListEvent& ev);
+	void OnUnchecked(wxListEvent& ev);
+	void ShiftPlayBt(bool isPlaying);	//changes text (bitmap) on play button
 	int GetCurrSelection() const;	//determines selection in the list
+	void Select(const int & id);
+	void Deselect(const int & id);
+	void OnTimer(wxTimerEvent& ev);
 private:
 	wxPanel * mLibsPanel;
+	wxPanel * mMediaCtrlsPanel;
 	wxBoxSizer * mLibsSizer;
 	wxCheckedListCtrl * mList;
 	wxListBox * mPlayLists;
@@ -80,10 +90,15 @@ private:
 	wxButton * mVolButton;
 	wxButton * mPlayBt;
 	wxVector<wxString> mLibNames;
+	wxVector<int> mSelectedItems;
+	wxVector<int> mCheckedItems;
 	int mActiveLib;
+	bool mDontStoreSelection;
 //	wxBoxSizer * mSizer1;
     wxDECLARE_EVENT_TABLE();
 	PlayerApp * mApp;
+	wxPoint mNamePos;
+	wxTimer mSliderTimer;
 };
 
 
