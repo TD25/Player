@@ -6,7 +6,9 @@
 #include "wx/mediactrl.h"
 #include "wx/filename.h"
 #include "wx/timer.h"
+#include "TextPanel.h"
 
+#define SLIDER_MAX_VAL 1000
 // IDs for the controls and the menu commands
 enum
 {
@@ -29,7 +31,9 @@ enum
 	CTRL_PLAYLISTS,
 	CTRL_VOL_BUTTON,
 	CTRL_VOL_SLIDER,
-	MEDIA_CTRL
+	MEDIA_CTRL,
+	TIMER_SLIDER,
+	TIMER_TIME
 };
 
 class ListUpdateEv : public wxCommandEvent
@@ -68,19 +72,40 @@ public:
 	void OnMediaStop(wxMediaEvent& ev) {}
 	void OnMediaFinish(wxMediaEvent& ev);
 	void OnPlayBt(wxCommandEvent& ev);
+	void OnPlay(bool lookForNew = true);
 	void OnListActivated(wxListEvent& ev);
 	void OnSelected(wxListEvent& ev);
 	void OnDeselected(wxListEvent& ev);
 	void OnChecked(wxListEvent& ev);
 	void OnUnchecked(wxListEvent& ev);
 	void ShiftPlayBt(bool isPlaying);	//changes text (bitmap) on play button
-	int GetCurrSelection() const;	//determines selection in the list
+	long GetCurrSelection() const;	//determines selection in the list
 	void Select(const int & id);
 	void Deselect(const int & id);
-	void OnTimer(wxTimerEvent& ev);
+	void OnSliderTimer(wxTimerEvent& ev);
+	void OnSecondTimer(wxTimerEvent& ev);
+	void DeleteCurrSelection();
+	void OnPaint(wxPaintEvent& ev);
+	void OnVolSlider(wxCommandEvent& ev);
+	void OnSlider(wxScrollEvent& ev);
+	void DrawName();
+	void DrawTime();
+	void ResetSlider()
+	{
+		mSlider->SetValue(0);
+	}
+	void SetCurrLength(wxFileOffset length)
+	{
+		//cause wxMediaCtrl fails to give right length
+//		length = (double)length * 1.06875;
+		int seconds = length / 1000;
+		mCurrLength[0] = seconds / 60;
+		mCurrLength[1] = seconds & 60;
+	}
 private:
 	wxPanel * mLibsPanel;
 	wxPanel * mMediaCtrlsPanel;
+	TextPanel * mTextPanel;
 	wxBoxSizer * mLibsSizer;
 	wxCheckedListCtrl * mList;
 	wxListBox * mPlayLists;
@@ -90,15 +115,20 @@ private:
 	wxButton * mVolButton;
 	wxButton * mPlayBt;
 	wxVector<wxString> mLibNames;
-	wxVector<int> mSelectedItems;
-	wxVector<int> mCheckedItems;
+	wxVector<long> mSelectedItems;
+	wxVector<long> mCheckedItems;
 	int mActiveLib;
 	bool mDontStoreSelection;
 //	wxBoxSizer * mSizer1;
     wxDECLARE_EVENT_TABLE();
 	PlayerApp * mApp;
-	wxPoint mNamePos;
 	wxTimer mSliderTimer;
+	TextPanel * mTimePanel;
+	long mCurrItemId; //currently played item's id in list
+	int mSecondsPlaying;
+	int mCurrLength[2]; //minutes and seconds
+	wxString mCurrName;
+	friend PlayerApp;
 };
 
 

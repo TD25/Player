@@ -30,7 +30,7 @@ include( "${wxWidgets_USE_FILE}" )
 # For convenience we define the sources as a variable. You can add 
 # header files and cpp/c files and CMake will sort them out
 set(SRCS PlayerMain.cpp checkedlistctrl.cpp FileManager.cpp 
-	PlayerFrame.cpp)
+	PlayerFrame.cpp TextPanel.cpp)
 
 add_definitions(-std=gnu++11 -pthread)
  

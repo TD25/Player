@@ -52,6 +52,8 @@ private:
 	PlayerFrame * mFrame;
 	wxMediaCtrl * mMediaCtrl;
 	wxFileName mPlayedFile;
+	wxTimer * mSliderTimer;
+	wxTimer * mSecondTimer;
 public:
     // override base class virtuals
     // ----------------------------
@@ -71,16 +73,46 @@ public:
 		return 0;
 	}
 	void Play(const wxString & libName, const wxString & plName, 
-			const int id); 
+			const long id); 
 	void Pause();
-	wxFileOffset MediaLoaded();
+	void MediaLoaded();
 	void PlayNew(const wxFileName * file);
+	bool IsPlaying()
+	{
+		if (mMediaCtrl->GetState() == wxMEDIASTATE_PLAYING)
+			return true;
+		else
+			return false;
+	}
+	bool IsPaused()
+	{
+		if (mMediaCtrl->GetState() == wxMEDIASTATE_PAUSED)
+			return true;
+		else
+			return false;
+	}
+	void StopTimer()
+	{
+		mSliderTimer->Stop();
+		mSecondTimer->Stop();
+	}
+	void SetVolume(double val)
+	{
+		mMediaCtrl->SetVolume(val);
+	}
+	void Seek(double part)
+	{
+		bool playing = (mMediaCtrl->GetState() == wxMEDIASTATE_PLAYING);
+		wxFileOffset length = mMediaCtrl->Length();
+		wxFileOffset off = length * part;
+		if (off == 0)
+			off = 1;
+		if (length <= off)
+			off = length - 5;	
+		mMediaCtrl->Seek(off);
+	}
+	wxFileOffset Tell();
 };
-
-// ----------------------------------------------------------------------------
-// constants
-// ----------------------------------------------------------------------------
-
 // ----------------------------------------------------------------------------
 // event tables and other macros for wxWidgets
 // ----------------------------------------------------------------------------
@@ -106,7 +138,10 @@ wxBEGIN_EVENT_TABLE(PlayerFrame, wxFrame)
 	EVT_LIST_ITEM_UNCHECKED(CTRL_LIST, PlayerFrame::OnUnchecked)
 	EVT_LIST_ITEM_SELECTED(CTRL_LIST, PlayerFrame::OnSelected)
 	EVT_LIST_ITEM_DESELECTED(CTRL_LIST, PlayerFrame::OnDeselected)
-	EVT_TIMER(-1, PlayerFrame::OnTimer)
+	EVT_TIMER(TIMER_SLIDER, PlayerFrame::OnSliderTimer)	
+	EVT_TIMER(TIMER_TIME, PlayerFrame::OnSecondTimer)
+	EVT_SLIDER(CTRL_VOL_SLIDER, PlayerFrame::OnVolSlider)
+	EVT_SCROLL_CHANGED(PlayerFrame::OnSlider)
 wxEND_EVENT_TABLE()
 
 //define events sent by worker threads
@@ -144,10 +179,13 @@ bool PlayerApp::OnInit()
 		   	yScreen/4.5);
     mFrame = new PlayerFrame("Player", pos, size, this);
 
+	mSliderTimer = new wxTimer(mFrame, TIMER_SLIDER);
+	mSecondTimer = new wxTimer(mFrame, TIMER_TIME);
     // and show it (the frames, unlike simple controls, are not shown when
     // created initially)
     mFrame->Show(true);
 	mMediaCtrl = new wxMediaCtrl;
+	mMediaCtrl->SetVolume(0.5);
 
 #ifdef __WINDOWS__ //because default doesn't work for some reason
 	if (!mMediaCtrl->Create(mFrame, MEDIA_CTRL, wxEmptyString, 
@@ -192,8 +230,7 @@ bool PlayerApp::OnExceptionInMainLoop()
 
 	catch (const MyException & e)
 	{
-		wxMessageBox(e.what(), wxT("MyException"), wxICON_ERROR);
-//		wxLogError("Unexpected exception has occurred: %s", e.what());
+		wxMessageBox( e.what(), wxT("My Exception"), wxICON_ERROR);
 		if (e.type == MyException::FATAL_ERROR)
 			return false;
 		else
@@ -201,8 +238,7 @@ bool PlayerApp::OnExceptionInMainLoop()
 	}
 	catch (const std::exception& e) 
 	{
-		wxMessageBox( e.what(), wxT("runtime_error"), wxICON_INFORMATION);
-//		wxLogError("Unexpected exception has occurred: %s", e.what());
+		wxMessageBox( e.what(), wxT("runtime_error"), wxICON_ERROR);
 		// Exit the main loop and thus terminate the program.
 		return false;
 	}
@@ -221,7 +257,7 @@ void PlayerApp::AddLib(wxString name, wxString extensions[], int extN,
 }
 
 void PlayerApp::Play(const wxString & libName, const wxString & plName,
-		const int id)
+		const long id)
 {
 
 	const wxFileName * file = mFManager->GetFile(libName, plName, id);	
@@ -238,6 +274,8 @@ void PlayerApp::Play(const wxString & libName, const wxString & plName,
 		if (mPlayedFile == *file)
 		{
 			mMediaCtrl->Play();
+			mSliderTimer->Start(-1);
+			mSecondTimer->Start(-1);
 			mFrame->ShiftPlayBt(true);
 		}
 		else
@@ -248,20 +286,32 @@ void PlayerApp::Play(const wxString & libName, const wxString & plName,
 
 }
 
-wxFileOffset PlayerApp::MediaLoaded()
+void PlayerApp::MediaLoaded()
 {
-	mMediaCtrl->Play();	
+	if (!mMediaCtrl->Play())	
+		throw MyException("Failed to play file", MyException::NOT_FATAL);
+	wxFileOffset length = mMediaCtrl->Length();
+	mFrame->SetCurrLength(length);
+	if (mSliderTimer->IsRunning())
+	{
+		mSliderTimer->Stop();
+		mSecondTimer->Stop();
+	}
+	int d = length / SLIDER_MAX_VAL;
+	if (length < 2000)
+		mSliderTimer->StartOnce(length / SLIDER_MAX_VAL);
+	else
+		mSliderTimer->Start(length / SLIDER_MAX_VAL);
+	mSecondTimer->Start(1000);
 	mFrame->ShiftPlayBt(true);
-	return mMediaCtrl->Length();
 }
 
 void PlayerFrame::OnMediaLoaded(wxMediaEvent& ev)
 {
-	wxFileOffset lenght = mApp->MediaLoaded();
-	wxString name = mList->GetItemText(GetCurrSelection(), 0);
-	wxClientDC dc(mMediaCtrlsPanel);
-	dc.DrawText(name, mNamePos);
-	mSliderTimer.Start(wxFileOffset(1000)/lenght);
+	mSecondsPlaying = 0;
+	mTimePanel->ChangeText("0.0/0.0");
+	mApp->MediaLoaded();
+	DrawName();
 //	for (int i = 1; i < mSelectedItems.size(); i++)
 //		Deselect(mSelectedItems[i]);
 //	Select(GetCurrSelection());
@@ -271,26 +321,30 @@ void PlayerFrame::OnMediaLoaded(wxMediaEvent& ev)
 void PlayerFrame::OnPlayBt(wxCommandEvent& ev)
 {
 	if (mPlayBt->GetLabel() == ">")
-		mApp->Play(mLibNames[mActiveLib], "all", GetCurrSelection());
-	else
 	{
-		mSliderTimer.Stop();
-		mApp->Pause();
+		if (!mApp->IsPaused())
+			OnPlay(true);
+		else
+			OnPlay(false);
 	}
+	else
+		mApp->Pause();
 }
 
 void PlayerApp::PlayNew(const wxFileName * file)
 {
 	wxString path = file->GetFullPath();
+	mFrame->ResetSlider();
 	if (!mMediaCtrl->Load(path))
 		throw MyException("Failed to load file in PlayerApp::PlayNew()",
 				MyException::NOT_FATAL);
 	mPlayedFile = *file;
+	mFrame->mCurrName = file->GetName();
 }
 
 void PlayerFrame::OnListActivated(wxListEvent& ev)
 {
-	mApp->Play(mLibNames[mActiveLib], "all", ev.GetIndex());
+	OnPlay(true);
 }
 
 void PlayerApp::Pause()
@@ -299,6 +353,8 @@ void PlayerApp::Pause()
 	{
 		mMediaCtrl->Pause();
 		mFrame->ShiftPlayBt(false);
+		mSliderTimer->Stop();
+		mSecondTimer->Stop();
 	}
 	else
 		throw MyException("Tried to pause altough is not playing",
@@ -307,35 +363,82 @@ void PlayerApp::Pause()
 
 void PlayerFrame::OnMediaFinish(wxMediaEvent& ev)
 {
-	mSliderTimer.Stop();
-	if (mSelectedItems.size() > 0)
+	mSlider->SetValue(SLIDER_MAX_VAL);
+	mApp->StopTimer();
+	if (mCheckedItems.size() > 0)
 	{
-		mList->Check(mSelectedItems[0], false);
-		int i = Find(mCheckedItems, mSelectedItems[0]);
-		mSelectedItems.erase(mSelectedItems.begin());
-		if (i != -1)
-		{
-			mList->Check(mCheckedItems[i], false);
-			mCheckedItems.erase(mCheckedItems.begin() + i);
-		}
-	}
-	else if (mCheckedItems.size() > 0)
-	{
-		mList->Check(mCheckedItems[0], false);
+		mCurrItemId = mCheckedItems[0];
+		int i = Find(mSelectedItems, mCurrItemId);
+		if (i > -1)
+			mSelectedItems.erase(mSelectedItems.begin()+i);
+		mApp->Play(mLibNames[mActiveLib], "all", mCurrItemId);
+		mList->Check(mCurrItemId, false);
 		mCheckedItems.erase(mCheckedItems.begin());
-	}
+	}	
 	else
-		throw MyException("Something wrong...:PlayerFrame::OnMediaFinish()",
-				MyException::NOT_FATAL);
-	try
-	{
-		int ind = GetCurrSelection();
-		mApp->Play(mLibNames[mActiveLib], "all", ind);
-	}
-	catch (MyException & exc)
 	{
 		ShiftPlayBt(false);
-		return;
 	}
 }
 
+void PlayerFrame::OnPlay(bool lookForNew)
+{
+	if (lookForNew)
+	{
+		try
+		{
+			mCurrItemId = GetCurrSelection();
+		}
+		catch (MyException & exc)
+		{
+			if (mCurrItemId == -1)
+				throw;
+		}
+		mApp->Play(mLibNames[mActiveLib], "all", mCurrItemId);
+		mList->Check(mCurrItemId, false);
+		DeleteCurrSelection();
+		for (int i = 0; i < mSelectedItems.size(); i++)
+		{
+			mCheckedItems.push_back(mSelectedItems[i]);
+			mList->Check(mSelectedItems[i], true);
+		}
+		mSelectedItems.clear();
+	}
+	else
+		mApp->Play(mLibNames[mActiveLib], "all", mCurrItemId);
+}
+
+wxFileOffset PlayerApp::Tell()
+{
+	if (mMediaCtrl->GetState() != wxMEDIASTATE_PLAYING)
+		throw MyException("Not playing: PlayerApp::Tell()", 
+				MyException::NOT_FATAL);
+	return mMediaCtrl->Tell();
+}
+
+void PlayerFrame::OnSecondTimer(wxTimerEvent& ev)
+{
+	wxFileOffset off = mApp->Tell();
+	int seconds = off / 1000;
+	int minutesPl = seconds / 60;
+	int secondsPl = seconds % 60;
+	wxString str;
+	str.Printf(wxT("%d:%d/%d:%d"), minutesPl, secondsPl, mCurrLength[0],
+			mCurrLength[1]);
+	mTimePanel->ChangeText(str);
+}
+
+void PlayerFrame::OnVolSlider(wxCommandEvent& ev)
+{
+	double selection = mVolSlider->GetValue();
+	mApp->SetVolume(selection / SLIDER_MAX_VAL);
+}
+
+void PlayerFrame::OnSlider(wxScrollEvent& ev)
+{
+	if (ev.GetId() == CTRL_SLIDER)
+	{
+		double part = (double)mSlider->GetValue() / SLIDER_MAX_VAL; 
+		mApp->Seek(part);
+	}
+}

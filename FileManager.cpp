@@ -2,6 +2,10 @@
 #include "wx/event.h"
 #include "PlayerFrame.h"
 #include "wx/log.h"
+#ifdef __WINDOWS__
+	#include <windows.h>
+	#include <string>
+#endif
 
 ListUpdateEv::ListUpdateEv(wxFileName file) : 
 	wxCommandEvent(EVT_SEARCHER_UPDATE), mFile(file)	
@@ -76,28 +80,64 @@ int FileManager::FromLib(const wxFileName & file)
 	return -1;
 }
 
-
 wxThread::ExitCode FileManager::SearcherThread::Entry()
 {
-	mDir.Open(mFirstDir);
-	int n = mDir.Traverse(*this, wxEmptyString, wxDIR_DIRS | wxDIR_FILES);
-	if (n == -1)
+
+	int r;
+#ifdef __LINUX__
+	mDir.Open("/home/");
+	r = mDir.Traverse(*this, wxEmptyString, wxDIR_DIRS | wxDIR_FILES | wxDIR_NO_FOLLOW);
+	if (r == -1)
 		throw MyException("wxDir::Traverse failed", 
 			MyException::FATAL_ERROR);
-	mSearchStage++;
-#ifndef __LINUX__
-	mDir.Open(mSecondDir);
-	n = mDir.Traverse(*this, wxEmptyString, wxDIR_DIRS | wxDIR_FILES);
-	if (n == -1)
+	mDir.Open("/media/");
+	r = mDir.Traverse(*this, wxEmptyString, wxDIR_DIRS | wxDIR_FILES |
+			wxDIR_NO_FOLLOW);
+	if (r == -1)
 		throw MyException("wxDir::Traverse failed", 
 			MyException::FATAL_ERROR);
-#endif
+
+#endif //__LINUX__
+
+#ifdef __WINDOWS__
+	//it will find folders on windows without permisions to see files in them
+		//so we supress errors
+	wxLog::SetLogLevel(wxLOG_FatalError);
+	//enumerate drives in windows
+	TCHAR drives[512];
+	int val = GetLogicalDriveStrings(511, drives);
+	if (val == 0)
+		throw MyException("GetLogicalDriveStrings() failed",
+			MyException::NOT_FATAL);
+	else
+	{
+		int len = _tcslen(&drives[0]);
+		int n = 0;
+		while (len > 0)
+		{
+		//if can't open don't try (may be empty disk drive or something)
+			if (!mDir.Open(&drives[n]))
+			{
+				n += len+1;
+				len = _tcslen(&drives[n]);
+				continue;
+			}
+			r = mDir.Traverse(*this, wxEmptyString, wxDIR_DIRS | wxDIR_FILES |	wxDIR_NO_FOLLOW);
+			n += len+1;
+			len = 0;
+			len = _tcslen(&drives[n]);
+		}
+	}
+	wxLog::SetLogLevel(wxLOG_Max) ;
+
+#endif //__WINDOWS__
 
 	if (!mStopped)
 	{
 		wxQueueEvent(mHandlerFrame, 
 			new wxThreadEvent(EVT_SEARCHER_COMPLETE));
 	}
+	
 
 	 return (wxThread::ExitCode)0; // success
 }
@@ -108,7 +148,6 @@ wxDirTraverseResult
 	if (!TestDestroy())
 	{
 		wxCriticalSectionLocker enter(mFManagerCS);
-		//wxMessageOutputDebug().Printf(filename);
 		wxFileName file(filename);
 		//TODO add function - FromPlaylist
 		int ind = mFManager->FromLib(file);
@@ -131,10 +170,15 @@ wxDirTraverseResult
 {
 	if (!TestDestroy())
 	{
-		if (mSearchStage > 0 && dirname == mFirstDir)
+
+//		wxMessageOutputDebug().Printf(dirname);
+		if (dirname.Matches("*Program Files") || 
+				dirname.Matches("*Program Files (x86)") 
+				|| dirname.Matches("*Windows") || 
+				dirname.Matches("*AppData") || 
+				dirname.Matches("*ProgramData"))
 			return wxDIR_IGNORE;
-		else
-			return wxDIR_CONTINUE;
+		return wxDIR_CONTINUE;
 	}
 	else
 		return wxDIR_STOP;
@@ -177,14 +221,6 @@ FileManager::SearcherThread::SearcherThread(
 		mFManager(fMan), mStopped(false)
 { 
 	mHandlerFrame = handler;
-#ifdef __LINUX__
-	mFirstDir = "/home";
-	mSecondDir = "/";
-#endif
-#ifdef __WINDOWS__
-	mFirstDir = "/Users";
-	mSecondDir = "/";
-#endif
 }
 
 const wxFileName * FileManager::GetFile(const wxString & libName, 

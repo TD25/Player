@@ -13,6 +13,11 @@ public:
 	} type;
 	MyException(const std::string str, Types type) :
 		std::runtime_error(str), type(type) {}
+	MyException(const char str[], Types type) :
+		std::runtime_error(str), type(type) {}
+	MyException(const std::wstring str, Types type) :
+		std::runtime_error(std::string(str.begin(), str.end()).c_str()),
+			type(type) {}
 };
 
 template<typename T>

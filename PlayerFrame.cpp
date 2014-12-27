@@ -8,7 +8,8 @@ const int maxSliderVal = 1000;
 PlayerFrame::PlayerFrame(const wxString& title, wxPoint &pos, 
 		wxSize &size, PlayerApp * pApp)
        : wxFrame(NULL, wxID_ANY, title, pos, size), mApp(pApp), 
-       mActiveLib(0), mDontStoreSelection(false), mSliderTimer(this)
+       mActiveLib(0), mDontStoreSelection(false), mSliderTimer(this),
+	   mCurrItemId(-1), mSecondsPlaying(0), mCurrName("")
 {
     // set the frame icon
 //    SetIcon(wxICON(sample));
@@ -35,6 +36,7 @@ PlayerFrame::PlayerFrame(const wxString& title, wxPoint &pos,
     // create a status bar just for fun (by default with 1 pane only)
     CreateStatusBar(2);
 
+	mCurrLength[0] = mCurrLength[1] = 0;
 
 	wxBoxSizer * mainSizer = new wxBoxSizer(wxVERTICAL);
 	wxBoxSizer * sizer1 = new wxBoxSizer(wxHORIZONTAL);
@@ -54,15 +56,15 @@ PlayerFrame::PlayerFrame(const wxString& title, wxPoint &pos,
 	wxButton * backBt = new wxButton(mMediaCtrlsPanel, CTRL_REVERSE, "<<",
 			btPos, btSize);
 	sizer1->AddSpacer(10);
-	sizer1->Add(backBt, 1, wxALIGN_CENTER);
+	sizer1->Add(backBt, 0, wxALIGN_CENTER | wxSHAPED);
 	btPos.x += btSize.x;
 	mPlayBt = new wxButton(mMediaCtrlsPanel, CTRL_PLAY, ">", 
 			btPos, btSize);
-	sizer1->Add(mPlayBt, 1, wxALIGN_CENTER);
+	sizer1->Add(mPlayBt, 0, wxALIGN_CENTER | wxSHAPED);
 	btPos.x += btSize.x;
 	wxButton * forwardBt = new wxButton(mMediaCtrlsPanel, CTRL_FORWARD, ">>",
 			btPos, btSize);
-	sizer1->Add(forwardBt, 1, wxALIGN_CENTER);
+	sizer1->Add(forwardBt, 0, wxALIGN_CENTER | wxSHAPED);
 	btPos.x += btSize.x + 20;
 	btPos.y += 10;
 	sizer1->AddSpacer(10);
@@ -71,18 +73,37 @@ PlayerFrame::PlayerFrame(const wxString& title, wxPoint &pos,
 	mVolPopup = new wxPopupTransientWindow(this);
 	wxPanel * volPanel = new wxPanel(mVolPopup, wxID_ANY,
 			wxPoint(0, 0), wxSize(25, 100));
-	mVolSlider = new wxSlider(volPanel, CTRL_VOL_SLIDER, 0, 0, maxSliderVal,
-		   wxPoint(5, 1), wxSize(20, 100), wxVERTICAL | wxSL_INVERSE);
-	
+	mVolSlider = new wxSlider(volPanel, CTRL_VOL_SLIDER, 0, 0, 
+			SLIDER_MAX_VAL, wxPoint(5, 1), wxSize(20, 100), 
+			wxVERTICAL | wxSL_INVERSE);
+	mVolSlider->SetValue(SLIDER_MAX_VAL/2); 
 	sizer1->Add(mVolButton, 0, wxALIGN_CENTER);
 	sizer1->AddSpacer(10);	
 	btPos.x += btSize.x + 20;
-	mSlider = new wxSlider(mMediaCtrlsPanel, CTRL_SLIDER, 0, 0,
+	wxPanel * sliderTextPan = new wxPanel(mMediaCtrlsPanel, wxID_ANY);
+	sliderTextPan->SetBackgroundColour(wxTheColourDatabase->
+			Find("DARK GREY"));
+	wxBoxSizer * sliderTextSizer = new wxBoxSizer(wxVERTICAL);
+	mSlider = new wxSlider(sliderTextPan, CTRL_SLIDER, 0, 0,
 		   	maxSliderVal, wxPoint(btPos.x, btPos.y+5), wxSize(400, 20));
-	mNamePos.x = btPos.x;
-	mNamePos.y = 1;
-	sizer1->Add(mSlider, 6, wxALIGN_BOTTOM);
-	sizer1->AddSpacer(10);
+   	wxFont font;
+	font.SetPointSize(14);
+	mTextPanel = new TextPanel(sliderTextPan, "", font, "WHITE", 
+			wxPoint(0, 10));
+	mTimePanel = new TextPanel(sliderTextPan, wxPoint(-1, -1), 
+			wxSize(100, 15));
+	mTimePanel->SetBackgroundColour(wxTheColourDatabase->Find(
+				"DARK GREY"));
+	mTextPanel->SetBackgroundColour(wxTheColourDatabase->Find(
+				"DARK GREY"));
+	sliderTextSizer->Add(mTextPanel, 2, wxEXPAND);
+	sliderTextSizer->Add(mTimePanel, 0);
+	sliderTextSizer->Add(mSlider, 1, wxEXPAND);
+	sliderTextPan->SetSizerAndFit(sliderTextSizer);
+	sizer1->Add(sliderTextPan, 6);
+	wxPanel * picturePanel = new wxPanel(mMediaCtrlsPanel, wxID_ANY,
+			wxPoint(-1, -1), wxSize(60, 60));
+	sizer1->Add(picturePanel, 0);
 	btPos.x = size.x - 200;
 	btSize.y = 25;
 	btSize.x = 200;
@@ -93,7 +114,7 @@ PlayerFrame::PlayerFrame(const wxString& title, wxPoint &pos,
 	mMediaCtrlsPanel->SetSizerAndFit(sizer1);
 
 //	mainSizer->Add(sizer1, 0, wxEXPAND);
-	mainSizer->AddSpacer(10);
+//	mainSizer->AddSpacer(10);
 	mainSizer->Add(mMediaCtrlsPanel, 0, wxEXPAND | wxALIGN_CENTER_VERTICAL);
 	
 	//make panel where libs are chosen
@@ -109,7 +130,7 @@ PlayerFrame::PlayerFrame(const wxString& title, wxPoint &pos,
 	btPos.y = 5;
 	btSize.x = 15;
 	btSize.y = 15;
-	mainSizer->AddSpacer(10);
+	mainSizer->AddSpacer(5);
 	mainSizer->Add(mLibsPanel, 0, wxEXPAND); 
 	//make playLists and media list panels
 	//media list
@@ -228,7 +249,7 @@ void PlayerFrame::ShiftPlayBt(bool isPlaying)
 		mPlayBt->SetLabel(">");
 }
 
-int PlayerFrame::GetCurrSelection() const
+long PlayerFrame::GetCurrSelection() const
 {
 	if (mSelectedItems.size() > 0)
 	{
@@ -248,7 +269,7 @@ void PlayerFrame::OnChecked(wxListEvent& ev)
 
 void PlayerFrame::OnUnchecked(wxListEvent& ev)
 {
-	int i = ev.GetIndex();
+	long i = ev.GetIndex();
 	int id = Find(mCheckedItems, i);
 	if (id == -1)
 //		throw MyException("No such index: PlayerFrame::OnUnchecked()",
@@ -267,8 +288,7 @@ void PlayerFrame::OnSelected(wxListEvent& ev)
 
 void PlayerFrame::OnDeselected(wxListEvent& ev)
 {
-	int i = ev.GetIndex();
-	int id = Find(mSelectedItems, i);
+	int id = Find(mSelectedItems, ev.GetIndex());
 	if (id == -1)
 		return;
 //		throw MyException("No such index: PlayerFrame::OnDeselected()",
@@ -293,7 +313,46 @@ void PlayerFrame::Deselect(const int & id)
 	wxQueueEvent(this, ev);
 }
 
-void PlayerFrame::OnTimer(wxTimerEvent& ev)
+void PlayerFrame::OnSliderTimer(wxTimerEvent& ev)
 {
 	mSlider->SetValue(mSlider->GetValue()+1);
+}
+
+void PlayerFrame::DeleteCurrSelection()
+{
+	if (mSelectedItems.size() > 0)
+	{
+		int i = Find(mCheckedItems, mSelectedItems[0]);
+		if (i > -1)
+		{
+			mList->Check(mCheckedItems[i], false);
+			mCheckedItems.erase(mCheckedItems.begin()+i);
+		}
+		mSelectedItems.erase(mSelectedItems.begin());
+	}
+	else if (mCheckedItems.size() > 0)
+		mCheckedItems.erase(mCheckedItems.begin());		
+}
+
+void PlayerFrame::OnPaint(wxPaintEvent& ev)
+{
+	if (mCurrItemId > -1)
+		DrawName();
+	DrawTime();
+}
+
+void PlayerFrame::DrawName()
+{
+	if (mCurrItemId == -1)
+		throw MyException("mCurrItemId is not set", 
+				MyException::NOT_FATAL);
+	mTextPanel->ChangeText(mCurrName);
+}
+
+void PlayerFrame::DrawTime()
+{
+	if (mCurrItemId == -1)
+	{
+		mTimePanel->ChangeText("0:0/0:0");
+	}
 }
