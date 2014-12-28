@@ -9,7 +9,8 @@ PlayerFrame::PlayerFrame(const wxString& title, wxPoint &pos,
 		wxSize &size, PlayerApp * pApp)
        : wxFrame(NULL, wxID_ANY, title, pos, size), mApp(pApp), 
        mActiveLib(0), mDontStoreSelection(false), mSliderTimer(this),
-	   mCurrItemId(-1), mSecondsPlaying(0), mCurrName("")
+	   mCurrItemId(-1), mSecondsPlaying(0), mCurrName(""), 
+	   mActivePlaylist(0), mCurrItemInList(-1)
 {
     // set the frame icon
 //    SetIcon(wxICON(sample));
@@ -76,7 +77,7 @@ PlayerFrame::PlayerFrame(const wxString& title, wxPoint &pos,
 	mVolSlider = new wxSlider(volPanel, CTRL_VOL_SLIDER, 0, 0, 
 			SLIDER_MAX_VAL, wxPoint(5, 1), wxSize(20, 100), 
 			wxVERTICAL | wxSL_INVERSE);
-	mVolSlider->SetValue(SLIDER_MAX_VAL/2); 
+	mVolSlider->SetValue(SLIDER_MAX_VAL); 
 	sizer1->Add(mVolButton, 0, wxALIGN_CENTER);
 	sizer1->AddSpacer(10);	
 	btPos.x += btSize.x + 20;
@@ -107,9 +108,9 @@ PlayerFrame::PlayerFrame(const wxString& title, wxPoint &pos,
 	btPos.x = size.x - 200;
 	btSize.y = 25;
 	btSize.x = 200;
-	wxTextCtrl * searchBox = new wxTextCtrl(mMediaCtrlsPanel, CTRL_SEARCH, "search",
-			btPos, btSize);
-	sizer1->Add(searchBox, 4, wxALIGN_CENTER);
+	mSearchBox = new wxTextCtrl(mMediaCtrlsPanel, CTRL_SEARCH, "",
+			btPos, btSize, wxTE_PROCESS_ENTER);
+	sizer1->Add(mSearchBox, 4, wxALIGN_CENTER);
 	
 	mMediaCtrlsPanel->SetSizerAndFit(sizer1);
 
@@ -193,6 +194,8 @@ void PlayerFrame::AddLib(wxString label, wxString columns[], int n)
 	static wxVector<wxButton*> buttons;
 
 	mLibNames.push_back(label);
+	mPlaylistNames.push_back(wxVector<wxString>());
+	mPlaylistNames[mLibNames.size()-1].push_back("all");
 	wxSize size(GetSize().x/(buttons.size()+1), 25);
 	//resize others
 	for (int i = 0; i < buttons.size(); i++)
@@ -218,6 +221,9 @@ void PlayerFrame::AddListItem(wxListItem & item)
 
 void PlayerFrame::OnNewItem(wxCommandEvent& evt)
 {
+	if (mSearchBox->GetValue().size() > 0)
+		return;
+	mListMap.push_back(mList->GetItemCount());
 	ListUpdateEv * ev = dynamic_cast<ListUpdateEv*>(&evt);
 	assert(ev != NULL);
 	wxListItem item;
@@ -254,10 +260,10 @@ long PlayerFrame::GetCurrSelection() const
 	if (mSelectedItems.size() > 0)
 	{
 		int i = mSelectedItems[0];
-		return i;
+		return mListMap[i];
 	}
 	else if (mCheckedItems.size() > 0)
-		return mCheckedItems[0];
+		return mListMap[mCheckedItems[0]];
 	else
 		throw MyException("Nothing selected", MyException::NOT_FATAL);
 }
@@ -355,4 +361,18 @@ void PlayerFrame::DrawTime()
 	{
 		mTimePanel->ChangeText("0:0/0:0");
 	}
+}
+
+
+long PlayerFrame::GetCurrSelectionInList() const
+{
+	if (mSelectedItems.size() > 0)
+	{
+		return mSelectedItems[0];
+	}
+	else if (mCheckedItems.size() > 0)
+		return mCheckedItems[0];
+	else
+		throw MyException("Nothing selected", MyException::NOT_FATAL);
+
 }

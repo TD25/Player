@@ -64,6 +64,7 @@ public:
 	{
 		return mName;
 	}
+	wxVector<long> FindFiles(const wxString & mask) const;
 };
 
 class MediaLibrary
@@ -208,5 +209,8 @@ public:
 	int FromLib(const wxFileName & file);
 	const wxFileName * GetFile(const wxString & libName, 
 			const wxString & plName, const int & id) const;
+	//searches for files in playlist and returns indexes
+	wxVector<long> FindFilesInPlaylist(const wxString & libName,
+			const wxString & plName, const wxString & mask) const;
 	~FileManager();
 };

@@ -72,6 +72,9 @@ public:
 	void OnMediaStop(wxMediaEvent& ev) {}
 	void OnMediaFinish(wxMediaEvent& ev);
 	void OnPlayBt(wxCommandEvent& ev);
+	void OnSearch(wxCommandEvent& ev);
+	void OnForward(wxCommandEvent& ev);
+	void OnReverse(wxCommandEvent& ev);
 	void OnPlay(bool lookForNew = true);
 	void OnListActivated(wxListEvent& ev);
 	void OnSelected(wxListEvent& ev);
@@ -79,7 +82,6 @@ public:
 	void OnChecked(wxListEvent& ev);
 	void OnUnchecked(wxListEvent& ev);
 	void ShiftPlayBt(bool isPlaying);	//changes text (bitmap) on play button
-	long GetCurrSelection() const;	//determines selection in the list
 	void Select(const int & id);
 	void Deselect(const int & id);
 	void OnSliderTimer(wxTimerEvent& ev);
@@ -103,6 +105,10 @@ public:
 		mCurrLength[1] = seconds & 60;
 	}
 private:
+	long GetCurrSelection() const;	//determines selection in the list
+	long GetCurrSelectionInList() const;
+
+	long mCurrItemInList;
 	wxPanel * mLibsPanel;
 	wxPanel * mMediaCtrlsPanel;
 	TextPanel * mTextPanel;
@@ -114,9 +120,13 @@ private:
 	wxSlider * mSlider;
 	wxButton * mVolButton;
 	wxButton * mPlayBt;
+	wxTextCtrl * mSearchBox;
 	wxVector<wxString> mLibNames;
+	wxVector<wxVector<wxString>> mPlaylistNames;
+	int mActivePlaylist;
 	wxVector<long> mSelectedItems;
 	wxVector<long> mCheckedItems;
+	wxVector<long> mListMap;
 	int mActiveLib;
 	bool mDontStoreSelection;
 //	wxBoxSizer * mSizer1;

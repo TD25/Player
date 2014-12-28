@@ -236,3 +236,23 @@ FileManager::~FileManager()
 	for (int i = 0; i < mFiles.size(); i++)
 		delete mFiles[i];
 }
+
+wxVector<long> FileManager::FindFilesInPlaylist(const wxString & libName,
+		const wxString & plName, const wxString & mask) const
+{
+	const Playlist * pl = GetPlaylist(libName, plName);
+	return pl->FindFiles(mask);
+}
+
+wxVector<long> Playlist::FindFiles(const wxString & mask) const
+{
+	wxVector<long> matchingInd;
+	for (int i = 0; i < mFiles.size(); i++)
+	{
+		wxString fName = mFiles[i]->GetName();
+		wxString temp = mask;
+		if ( fName.Lower().Matches(temp.Lower()))
+			matchingInd.push_back(i);		
+	}
+	return matchingInd;
+}

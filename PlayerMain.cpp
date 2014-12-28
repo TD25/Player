@@ -111,6 +111,17 @@ public:
 			off = length - 5;	
 		mMediaCtrl->Seek(off);
 	}
+	wxVector<long> FindFiles(const wxString & libName, 
+			const wxString & plName, const wxString & str)
+	{
+		return mFManager->FindFilesInPlaylist(libName, plName, str);
+	}
+	wxString GetFileName(const wxString & libName, 
+			const wxString & plName, const int & id)
+	{
+		const wxFileName * file = mFManager->GetFile(libName, plName, id);
+		return file->GetName();
+	}
 	wxFileOffset Tell();
 };
 // ----------------------------------------------------------------------------
@@ -142,6 +153,9 @@ wxBEGIN_EVENT_TABLE(PlayerFrame, wxFrame)
 	EVT_TIMER(TIMER_TIME, PlayerFrame::OnSecondTimer)
 	EVT_SLIDER(CTRL_VOL_SLIDER, PlayerFrame::OnVolSlider)
 	EVT_SCROLL_CHANGED(PlayerFrame::OnSlider)
+	EVT_BUTTON(CTRL_FORWARD, PlayerFrame::OnForward)
+	EVT_BUTTON(CTRL_REVERSE, PlayerFrame::OnReverse)
+	EVT_TEXT(CTRL_SEARCH, PlayerFrame::OnSearch)
 wxEND_EVENT_TABLE()
 
 //define events sent by worker threads
@@ -312,6 +326,7 @@ void PlayerFrame::OnMediaLoaded(wxMediaEvent& ev)
 	mTimePanel->ChangeText("0.0/0.0");
 	mApp->MediaLoaded();
 	DrawName();
+	mList->Check(mCurrItemInList, false);
 //	for (int i = 1; i < mSelectedItems.size(); i++)
 //		Deselect(mSelectedItems[i]);
 //	Select(GetCurrSelection());
@@ -367,12 +382,14 @@ void PlayerFrame::OnMediaFinish(wxMediaEvent& ev)
 	mApp->StopTimer();
 	if (mCheckedItems.size() > 0)
 	{
-		mCurrItemId = mCheckedItems[0];
-		int i = Find(mSelectedItems, mCurrItemId);
+		mCurrItemInList = mCheckedItems[0];
+		mCurrItemId = mListMap[mCurrItemInList];
+		int i = Find(mSelectedItems, mCurrItemInList);
 		if (i > -1)
 			mSelectedItems.erase(mSelectedItems.begin()+i);
-		mApp->Play(mLibNames[mActiveLib], "all", mCurrItemId);
-		mList->Check(mCurrItemId, false);
+		mApp->Play(mLibNames[mActiveLib], 
+				mPlaylistNames[mActiveLib][mActivePlaylist], mCurrItemId);
+//		mList->Check(mCurrItemInList, false);
 		mCheckedItems.erase(mCheckedItems.begin());
 	}	
 	else
@@ -387,15 +404,17 @@ void PlayerFrame::OnPlay(bool lookForNew)
 	{
 		try
 		{
-			mCurrItemId = GetCurrSelection();
+			mCurrItemInList = GetCurrSelectionInList();
+			mCurrItemId = mListMap[mCurrItemInList];
 		}
 		catch (MyException & exc)
 		{
-			if (mCurrItemId == -1)
+			if (mCurrItemId == -1 || mCurrItemInList == -1)
 				throw;
 		}
-		mApp->Play(mLibNames[mActiveLib], "all", mCurrItemId);
-		mList->Check(mCurrItemId, false);
+		mApp->Play(mLibNames[mActiveLib], 
+				mPlaylistNames[mActiveLib][mActivePlaylist], mCurrItemId);
+//		mList->Check(mCurrItemInList, false);
 		DeleteCurrSelection();
 		for (int i = 0; i < mSelectedItems.size(); i++)
 		{
@@ -405,7 +424,8 @@ void PlayerFrame::OnPlay(bool lookForNew)
 		mSelectedItems.clear();
 	}
 	else
-		mApp->Play(mLibNames[mActiveLib], "all", mCurrItemId);
+		mApp->Play(mLibNames[mActiveLib], 
+				mPlaylistNames[mActiveLib][mActivePlaylist], mCurrItemId);
 }
 
 wxFileOffset PlayerApp::Tell()
@@ -442,3 +462,80 @@ void PlayerFrame::OnSlider(wxScrollEvent& ev)
 		mApp->Seek(part);
 	}
 }
+
+void PlayerFrame::OnForward(wxCommandEvent& ev)
+{
+	if (mCheckedItems.size() > 0)
+	{
+		wxMediaEvent ev;
+		mApp->Seek(1);
+		OnMediaFinish(ev);
+	}
+	else
+	{
+		if (mCurrItemInList < mList->GetItemCount())
+		{
+			mCurrItemInList++;
+			mCurrItemId = mListMap[mCurrItemInList];
+			mCheckedItems.push_back(mCurrItemInList);
+			mApp->Seek(1);
+			OnPlay(true);
+		}
+		else
+			ShiftPlayBt(false);
+	}
+}
+
+void PlayerFrame::OnReverse(wxCommandEvent& ev)
+{
+	if (mCurrItemInList > 0)
+	{
+		mCurrItemInList--;
+		mCurrItemId = mListMap[mCurrItemInList];
+		mCheckedItems.insert(mCheckedItems.begin(), mCurrItemInList);
+		wxMediaEvent ev;
+		OnMediaFinish(ev);
+	}
+}
+
+void PlayerFrame::OnSearch(wxCommandEvent& ev)
+{
+//	ev.Skip();
+	wxString str = mSearchBox->GetValue();
+	wxString mask;
+	mask.Printf("*%s*", str);
+//	if (str.size() < 5)
+//		return;
+	int start = -1;
+	int r = 0;
+
+	//TODO handle this part more efficiently by getting files
+	//	with names and id's, so that you don't need to call 
+	//	mApp->GetFileNames()
+	wxVector<long> indexes = mApp->FindFiles(mLibNames[mActiveLib],
+			mPlaylistNames[mActiveLib][mActivePlaylist], mask);
+
+	if (indexes.size() > 0)
+	{
+		mCheckedItems.clear();
+		mSelectedItems.clear();
+		mListMap = indexes;
+		wxVector<wxListItem> newItems;
+		for (int i = 0; i < indexes.size(); i++)
+		{
+			wxListItem item;
+			item.SetId(i);	
+			wxString label = mApp->GetFileName(mLibNames[mActiveLib],
+					mPlaylistNames[mActiveLib][mActivePlaylist], indexes[i]);
+			item.SetText(label);
+			newItems.push_back(item);
+		}
+		mList->DeleteAllItems();
+		for (int i = 0; i < newItems.size(); i++)
+		{
+			AddListItem(newItems[i]);
+		}
+	}
+
+}
+
