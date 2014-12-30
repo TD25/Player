@@ -8,14 +8,15 @@
 #include "PlayerFrame.h"
 #include "wx/filename.h"
 #include "wx/dir.h"
+#include "File.h"
 
 
 class Playlist
 {
 private:
 	wxString mName;
-	wxVector<wxFileName*> mFiles;
-	wxFileName * Find(wxString path) const
+	wxVector<File*> mFiles;
+	File * Find(wxString path) const
 	{
 		for (int i = 0; i < mFiles.size(); i++)
 		{
@@ -24,7 +25,7 @@ private:
 		}
 		return NULL;
 	}
-	wxFileName * Find(wxFileName * file) const 
+	File * Find(File * file) const 
 	{
 		for (int i = 0; i < mFiles.size(); i++)
 		{
@@ -36,7 +37,7 @@ private:
 public:
 	Playlist(wxString name) : mName(name)
 	{}
-	void Add(wxFileName * file)
+	void Add(File * file)
 	{
 		assert(file != NULL); 
 		if (Find(file) != NULL)
@@ -47,16 +48,16 @@ public:
 		//	somewhere if not fatal
 		mFiles.push_back(file);
 	}
-	const wxVector<wxFileName*> * GetFiles() const 
+	const wxVector<File*> * GetFiles() const 
 	{
 		return &mFiles;
 	}
-	const wxFileName* GetFile(const int & id) const 
+	const File* GetFile(const int & id) const 
 	{
 		assert(id < mFiles.size());
 		return mFiles[id];
 	}
-	const wxFileName* GetFile(wxString name) const
+	const File* GetFile(wxString name) const
 	{
 		return Find(name);
 	}
@@ -110,11 +111,11 @@ public:
 					MyException::NOT_FATAL);
 		mPlaylists.push_back(name);
 	}
-	void AddFile(wxFileName * file)
+	void AddFile(File * file)
 	{
 		mPlaylists[0].Add(file);
 	}
-	void AddFileToPlaylist(wxFileName * file, wxString playlistName)
+	void AddFileToPlaylist(File * file, wxString playlistName)
 	{
 		mPlaylists[0].Add(file);
 		int ind = FindPlaylist(playlistName);
@@ -158,7 +159,7 @@ wxDECLARE_EVENT(EVT_SEARCHER_UPDATE, ListUpdateEv);
 class FileManager 
 {
 private:
-	wxVector<wxFileName*> mFiles;	//all files found
+	wxVector<File*> mFiles;	//all files found
 	wxVector<MediaLibrary> mLibs;
 	int FindLib(const wxString & name) const;
 	PlayerFrame * mHandlerFrame;
@@ -207,7 +208,7 @@ public:
 	//looks if extension of file is right
 	//returns lib index
 	int FromLib(const wxFileName & file);
-	const wxFileName * GetFile(const wxString & libName, 
+	const File * GetFile(const wxString & libName, 
 			const wxString & plName, const int & id) const;
 	//searches for files in playlist and returns indexes
 	wxVector<long> FindFilesInPlaylist(const wxString & libName,

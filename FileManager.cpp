@@ -7,8 +7,8 @@
 	#include <string>
 #endif
 
-ListUpdateEv::ListUpdateEv(wxFileName file) : 
-	wxCommandEvent(EVT_SEARCHER_UPDATE), mFile(file)	
+ListUpdateEv::ListUpdateEv(const File * file) : 
+	wxCommandEvent(EVT_SEARCHER_UPDATE), mpFile(file)	
 	{}
 
 void FileManager::AddLib(MediaLibrary lib)
@@ -148,12 +148,20 @@ wxDirTraverseResult
 	if (!TestDestroy())
 	{
 		wxCriticalSectionLocker enter(mFManagerCS);
-		wxFileName file(filename);
+		wxFileName name(filename);
 		//TODO add function - FromPlaylist
-		int ind = mFManager->FromLib(file);
+		int ind = mFManager->FromLib(name);
 		if (ind > -1)
 		{
-			mFManager->mFiles.push_back(new wxFileName(file));
+			wxString type = mFManager->mLibs[ind].GetName();
+			File * file;
+			if (type == "Music")
+			{
+				file = new MusicFile(name);
+			}
+			else //TODO: create other file types
+				return wxDIR_CONTINUE;
+			mFManager->mFiles.push_back(file);
 			mFManager->mLibs[ind].AddFile(mFManager->mFiles.back());
 			wxQueueEvent(mHandlerFrame, new ListUpdateEv(file));
 		}
@@ -223,11 +231,11 @@ FileManager::SearcherThread::SearcherThread(
 	mHandlerFrame = handler;
 }
 
-const wxFileName * FileManager::GetFile(const wxString & libName, 
+const File * FileManager::GetFile(const wxString & libName, 
 		const wxString & plName, const int & id) const
 {
 	const Playlist * pl = GetPlaylist(libName, plName);
-	const wxFileName * file = pl->GetFile(id);
+	const File * file = pl->GetFile(id);
 	return file;
 }
 

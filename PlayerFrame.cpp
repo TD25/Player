@@ -1,5 +1,6 @@
 #include "PlayerFrame.h"
 #include "Common.h"
+#include "File.h"
 
 //constants
 const int maxSliderVal = 1000;
@@ -149,12 +150,9 @@ PlayerFrame::PlayerFrame(const wxString& title, wxPoint &pos,
 //	mPlayLists->InsertItems(5, items, 0);
 
 	//media list
-	mList = new wxCheckedListCtrl(panel2, CTRL_LIST, wxPoint(0, 0),
+	mList = new ResCheckedListCtrl(panel2, CTRL_LIST, wxPoint(0, 0),
 			wxSize(size.x, size.y - 40), wxLC_REPORT | wxLC_HRULES | 
 			wxLC_VRULES);
-
-	mList->AppendColumn(wxT("Name"), wxLIST_FORMAT_LEFT, size.x / 1.5);     
-	mList->AppendColumn(wxT("Size"), wxLIST_FORMAT_LEFT, size.x/8);
 
 	sizer2->Add(mList, 8, wxEXPAND);
 	panel2->SetSizerAndFit(sizer2);
@@ -162,6 +160,8 @@ PlayerFrame::PlayerFrame(const wxString& title, wxPoint &pos,
 	mainSizer->Add(panel2, 10, wxEXPAND);
 
 	SetSizer(mainSizer);
+
+	mOrgSize = size;
 }
 
 
@@ -214,9 +214,20 @@ void PlayerFrame::AddLib(wxString label, wxString columns[], int n)
 }
 
 
-void PlayerFrame::AddListItem(wxListItem & item)
+void PlayerFrame::AddListItem(const File * file)
 {
+	wxListItem item;
+	item.SetId(mList->GetItemCount());
+	item.SetText(file->GetName());
 	mList->InsertItem(item);	
+	if (mList->GetColumnCount() != file->GetColCount())
+		throw MyException(
+"PlayerFrame::AddListItem() col counts in list and file are different",
+			MyException::FATAL_ERROR);
+	for (int i = 1; i < mList->GetColumnCount(); i++)
+	{
+		mList->SetItem(item.GetId(), i, file->GetColContent(i));
+	}
 }
 
 void PlayerFrame::OnNewItem(wxCommandEvent& evt)
@@ -226,10 +237,7 @@ void PlayerFrame::OnNewItem(wxCommandEvent& evt)
 	mListMap.push_back(mList->GetItemCount());
 	ListUpdateEv * ev = dynamic_cast<ListUpdateEv*>(&evt);
 	assert(ev != NULL);
-	wxListItem item;
-	item.SetId(mList->GetItemCount());
-	item.SetText(ev->GetFile().GetFullName());
-	AddListItem(item);
+	AddListItem(ev->GetFile());
 }
 
 void PlayerFrame::OnClose(wxCloseEvent & evt)
@@ -375,4 +383,24 @@ long PlayerFrame::GetCurrSelectionInList() const
 	else
 		throw MyException("Nothing selected", MyException::NOT_FATAL);
 
+}
+
+void PlayerFrame::MakeColumns(const wxString & lib)
+{
+	if (lib == "Music")
+	{
+		MusicFile file;
+		int n = file.GetColCount();
+		//get sizes sum for 
+			//calculating real sizes from relative ones
+		int sizeSum = 0;
+		for (int i = 0; i < n; i++)
+			sizeSum += file.GetColSize(i);
+		for (int i = 0; i < n; i++)
+		{
+			int size = ((double)file.GetColSize(i)/sizeSum)*
+				mList->GetSize().x;
+			mList->AppendColumn(file.GetCol(i), wxLIST_FORMAT_LEFT, size);
+		}
+	}
 }

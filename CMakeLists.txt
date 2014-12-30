@@ -17,22 +17,24 @@ set(CMAKE_MODULE_PATH "${PROJECT_SOURCE_DIR}")
 # We need the Find package for wxWidgets to work
 # NOTE: if you're using aui, include aui in this required components list.
  
+
+add_definitions(-std=gnu++11 -pthread)
+
 # It was noticed that when using MinGW gcc it is essential that 'core' is mentioned before 'base'.
 find_package(wxWidgets REQUIRED media core base)
  
 ##---------------------------------------------------
 ## Actual config file starts here
 ##--------------------------------------------------- 
- 
+
 # wxWidgets include (this will do all the magic to configure everything)
 include( "${wxWidgets_USE_FILE}" )
- 
+
 # For convenience we define the sources as a variable. You can add 
 # header files and cpp/c files and CMake will sort them out
 set(SRCS PlayerMain.cpp checkedlistctrl.cpp FileManager.cpp 
-	PlayerFrame.cpp TextPanel.cpp)
+	PlayerFrame.cpp TextPanel.cpp File.cpp ResCheckedListCtrl.cpp)
 
-add_definitions(-std=gnu++11 -pthread)
  
 # If we build for windows systems, we also include the resource file
 #containing the manifest, icon and other resources
@@ -43,7 +45,7 @@ add_definitions(-std=gnu++11 -pthread)
 if(WIN32)
 	add_definitions(-static)
 endif(WIN32)
-	
+
 set(DEBUG ON CACHE BOOL "Load debug symbols or not") 
 
 if (${DEBUG} STREQUAL ON)
@@ -56,9 +58,20 @@ endif(${DEBUG} STREQUAL ON)
 
 add_executable(Player WIN32 ${SRCS})
  
+set(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} "${CMAKE_SOURCE_DIR}/CMakeModules")
+#configure taglib
+find_package(Taglib 1.9.1 REQUIRED)
+if (TAGLIB_FOUND)
+	add_definitions(${TAGLIB_CFLAGS} ${TAGLIB_LIBRARIES} -lz)
 # We add to our target 'minimal' the wxWidgets libraries. These are
 # set for us by the find script. If you need other libraries, you
 # can add them here as well. 
-target_link_libraries(Player ${wxWidgets_LIBRARIES})
+	if (UNIX)
+#TODO: this might not work on other systems:
+		target_link_libraries(Player ${wxWidgets_LIBRARIES} ${TAGLIB_LIBRARIES}	"/lib/x86_64-linux-gnu/libz.so.1")
+	else()
+		target_link_libraries(Player ${wxWidgets_LIBRARIES} ${TAGLIB_LIBRARIES})
+	endif()
+endif()
 
 set( CMAKE_EXPORT_COMPILE_COMMANDS 1 )

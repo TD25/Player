@@ -12,6 +12,7 @@
 #include "wx/mediactrl.h"
 #include "checkedlistctrl.h"
 #include "wx/dcclient.h"
+#include "File.h"
 
 #ifdef __BORLANDC__
     #pragma hdrstop
@@ -111,7 +112,7 @@ public:
 			off = length - 5;	
 		mMediaCtrl->Seek(off);
 	}
-	wxVector<long> FindFiles(const wxString & libName, 
+	wxVector<long> FindFileIds(const wxString & libName, 
 			const wxString & plName, const wxString & str)
 	{
 		return mFManager->FindFilesInPlaylist(libName, plName, str);
@@ -121,6 +122,11 @@ public:
 	{
 		const wxFileName * file = mFManager->GetFile(libName, plName, id);
 		return file->GetName();
+	}
+	const File * GetFile(const wxString & libName, 
+			const wxString & plName, const int & id)
+	{
+		return mFManager->GetFile(libName, plName, id);
 	}
 	wxFileOffset Tell();
 };
@@ -222,6 +228,7 @@ bool PlayerApp::OnInit()
 //	//TODO: add more image formats
 	wxString picExtensions[5] = {".bmp", ".gif", ".jpeg", ".png", ".tif"};
 	AddLib("Pictures", picExtensions, 5);
+	mFrame->MakeColumns("Music");
 
 	wxLogStatus(mFrame, "Searching...");
 	mFManager->Search();
@@ -440,8 +447,8 @@ void PlayerFrame::OnSecondTimer(wxTimerEvent& ev)
 {
 	wxFileOffset off = mApp->Tell();
 	int seconds = off / 1000;
-	int minutesPl = seconds / 60;
 	int secondsPl = seconds % 60;
+	int minutesPl = (seconds-secondsPl) / 60;
 	wxString str;
 	str.Printf(wxT("%d:%d/%d:%d"), minutesPl, secondsPl, mCurrLength[0],
 			mCurrLength[1]);
@@ -512,7 +519,7 @@ void PlayerFrame::OnSearch(wxCommandEvent& ev)
 	//TODO handle this part more efficiently by getting files
 	//	with names and id's, so that you don't need to call 
 	//	mApp->GetFileNames()
-	wxVector<long> indexes = mApp->FindFiles(mLibNames[mActiveLib],
+	wxVector<long> indexes = mApp->FindFileIds(mLibNames[mActiveLib],
 			mPlaylistNames[mActiveLib][mActivePlaylist], mask);
 
 	if (indexes.size() > 0)
@@ -520,15 +527,12 @@ void PlayerFrame::OnSearch(wxCommandEvent& ev)
 		mCheckedItems.clear();
 		mSelectedItems.clear();
 		mListMap = indexes;
-		wxVector<wxListItem> newItems;
+		wxVector<const File *> newItems;
 		for (int i = 0; i < indexes.size(); i++)
 		{
-			wxListItem item;
-			item.SetId(i);	
-			wxString label = mApp->GetFileName(mLibNames[mActiveLib],
-					mPlaylistNames[mActiveLib][mActivePlaylist], indexes[i]);
-			item.SetText(label);
-			newItems.push_back(item);
+			newItems.push_back(mApp->GetFile(mLibNames[mActiveLib],
+						mPlaylistNames[mActiveLib][mActivePlaylist], 
+						indexes[i]));
 		}
 		mList->DeleteAllItems();
 		for (int i = 0; i < newItems.size(); i++)

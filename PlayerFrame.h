@@ -1,10 +1,10 @@
 #pragma once
 
 #include "wx/wx.h"
-#include "checkedlistctrl.h"
+#include "ResCheckedListCtrl.h"
 #include "wx/popupwin.h"
 #include "wx/mediactrl.h"
-#include "wx/filename.h"
+#include "File.h"
 #include "wx/timer.h"
 #include "TextPanel.h"
 
@@ -39,10 +39,10 @@ enum
 class ListUpdateEv : public wxCommandEvent
 {
 private:
-	wxFileName mFile;
+	const File * mpFile;
 public:
-	ListUpdateEv(wxFileName file);
-	wxFileName GetFile() {return mFile;}
+	ListUpdateEv(const File * file);
+	const File * GetFile() {return mpFile;}
 	 // implement the base class pure virtual
 	virtual wxEvent *Clone() const { return new ListUpdateEv(*this); }
 };
@@ -59,7 +59,7 @@ public:
     void OnQuit(wxCommandEvent& event);
     void OnAbout(wxCommandEvent& event);
 	void AddLib(wxString label, wxString columns[] = NULL, int n = 0);
-	void AddListItem(wxListItem & listItem);
+	void AddListItem(const File * file);
 	void OnNewItem(wxCommandEvent& event);
 	void OnSearchCompletion(wxCommandEvent& event) 
 	{
@@ -104,6 +104,7 @@ public:
 		mCurrLength[0] = seconds / 60;
 		mCurrLength[1] = seconds & 60;
 	}
+	void MakeColumns(const wxString & lib);
 private:
 	long GetCurrSelection() const;	//determines selection in the list
 	long GetCurrSelectionInList() const;
@@ -113,7 +114,7 @@ private:
 	wxPanel * mMediaCtrlsPanel;
 	TextPanel * mTextPanel;
 	wxBoxSizer * mLibsSizer;
-	wxCheckedListCtrl * mList;
+	ResCheckedListCtrl * mList;
 	wxListBox * mPlayLists;
 	wxSlider * mVolSlider;
 	wxPopupTransientWindow * mVolPopup;
@@ -139,6 +140,7 @@ private:
 	int mCurrLength[2]; //minutes and seconds
 	wxString mCurrName;
 	friend PlayerApp;
+	wxSize mOrgSize;
 };
 
 
