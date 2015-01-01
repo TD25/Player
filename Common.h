@@ -30,3 +30,6 @@ int Find(const wxVector<T> & v, const T & t)
 	}	
 	return -1;
 }
+
+wxString FormatTime(int minutes, int seconds);
+

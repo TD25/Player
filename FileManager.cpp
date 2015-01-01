@@ -90,12 +90,14 @@ wxThread::ExitCode FileManager::SearcherThread::Entry()
 	if (r == -1)
 		throw MyException("wxDir::Traverse failed", 
 			MyException::FATAL_ERROR);
+#ifdef NDEBUG
 	mDir.Open("/media/");
 	r = mDir.Traverse(*this, wxEmptyString, wxDIR_DIRS | wxDIR_FILES |
 			wxDIR_NO_FOLLOW);
 	if (r == -1)
 		throw MyException("wxDir::Traverse failed", 
 			MyException::FATAL_ERROR);
+#endif//NDEBUG
 
 #endif //__LINUX__
 
@@ -149,6 +151,8 @@ wxDirTraverseResult
 	{
 		wxCriticalSectionLocker enter(mFManagerCS);
 		wxFileName name(filename);
+		if (mFManager->IsFound(name))
+			return wxDIR_CONTINUE;
 		//TODO add function - FromPlaylist
 		int ind = mFManager->FromLib(name);
 		if (ind > -1)
@@ -157,7 +161,18 @@ wxDirTraverseResult
 			File * file;
 			if (type == "Music")
 			{
-				file = new MusicFile(name);
+				try
+				{
+					file = new MusicFile(name);
+				}
+				catch (MyException & exc)
+				{
+					//if failed to initialize object don't put it in the list
+					if (exc.type == MyException::NOT_FATAL)
+						return wxDIR_CONTINUE; 
+					else
+						throw;
+				}
 			}
 			else //TODO: create other file types
 				return wxDIR_CONTINUE;
@@ -178,8 +193,9 @@ wxDirTraverseResult
 {
 	if (!TestDestroy())
 	{
-
+//#ifndef NDEBUG
 //		wxMessageOutputDebug().Printf(dirname);
+//#endif //NDEBUG
 		if (dirname.Matches("*Program Files") || 
 				dirname.Matches("*Program Files (x86)") 
 				|| dirname.Matches("*Windows") || 
@@ -263,4 +279,14 @@ wxVector<long> Playlist::FindFiles(const wxString & mask) const
 			matchingInd.push_back(i);		
 	}
 	return matchingInd;
+}
+
+bool FileManager::IsFound(const wxFileName & filename) const
+{
+	for (int i = 0; i < mFiles.size(); i++)
+	{
+		if (mFiles[i]->GetFullPath() == filename.GetFullPath())
+			return true;
+	}
+	return false;
 }

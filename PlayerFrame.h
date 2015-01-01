@@ -19,6 +19,8 @@ enum
     // this standard value as otherwise it won't be handled properly under Mac
     // (where it is special and put into the "Apple" menu)
     ABOUT = wxID_ABOUT,
+	SEARCH,
+	STOP_SEARCH,
 	
 	//panel id's
 	CTRL_PLAY = wxID_HIGHEST+1,
@@ -67,7 +69,6 @@ public:
 	}
 	void OnClose(wxCloseEvent &);
 	void OnVolButton(wxCommandEvent& ev);
-	void OnVolume(wxCommandEvent& ev) {};
 	void OnMediaLoaded(wxMediaEvent& ev);
 	void OnMediaStop(wxMediaEvent& ev) {}
 	void OnMediaFinish(wxMediaEvent& ev);
@@ -90,29 +91,30 @@ public:
 	void OnPaint(wxPaintEvent& ev);
 	void OnVolSlider(wxCommandEvent& ev);
 	void OnSlider(wxScrollEvent& ev);
+	void OnSearchDrive(wxCommandEvent& ev);
+	void OnStopSearch(wxCommandEvent& ev);
 	void DrawName();
 	void DrawTime();
 	void ResetSlider()
 	{
 		mSlider->SetValue(0);
 	}
-	void SetCurrLength(wxFileOffset length)
+	void SetCurrLength(const wxString & length)
 	{
-		//cause wxMediaCtrl fails to give right length
-//		length = (double)length * 1.06875;
-		int seconds = length / 1000;
-		mCurrLength[0] = seconds / 60;
-		mCurrLength[1] = seconds & 60;
+		mCurrLengthStr = length;
 	}
 	void MakeColumns(const wxString & lib);
 private:
 	long GetCurrSelection() const;	//determines selection in the list
 	long GetCurrSelectionInList() const;
+	const File * GetCurrFile() const;
 
 	long mCurrItemInList;
+	wxMenu * mFileMenu;
 	wxPanel * mLibsPanel;
 	wxPanel * mMediaCtrlsPanel;
 	TextPanel * mTextPanel;
+	TextPanel * mArtistPanel;
 	wxBoxSizer * mLibsSizer;
 	ResCheckedListCtrl * mList;
 	wxListBox * mPlayLists;
@@ -137,8 +139,7 @@ private:
 	TextPanel * mTimePanel;
 	long mCurrItemId; //currently played item's id in list
 	int mSecondsPlaying;
-	int mCurrLength[2]; //minutes and seconds
-	wxString mCurrName;
+	wxString mCurrLengthStr; //minutes and seconds
 	friend PlayerApp;
 	wxSize mOrgSize;
 };

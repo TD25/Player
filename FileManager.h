@@ -189,7 +189,8 @@ private:
 	wxString mCurrLib, mCurrPlaylist;
 public:
 	FileManager(PlayerFrame * frame = NULL) :
-		mHandlerFrame(frame), mCurrLib(""), mCurrPlaylist("") {}
+		mHandlerFrame(frame), mCurrLib(""), mCurrPlaylist(""), 
+		mpThread(nullptr) {}
 	void SetFrame(PlayerFrame * frame) {mHandlerFrame = frame;}
 	void AddLib(MediaLibrary lib);
 	void AddLib(const wxString & name);
@@ -213,5 +214,16 @@ public:
 	//searches for files in playlist and returns indexes
 	wxVector<long> FindFilesInPlaylist(const wxString & libName,
 			const wxString & plName, const wxString & mask) const;
+	bool IsSearching()
+	{
+		if (mpThread == nullptr)
+			return false;
+		return mpThread->IsAlive();
+	}
+	int GetLibCount() const
+	{
+		return mLibs.size();
+	}
+	bool IsFound(const wxFileName & filename) const;
 	~FileManager();
 };

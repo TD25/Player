@@ -3,7 +3,7 @@
 #include "Common.h"
 #include "wx/vector.h"
 #include "wx/string.h"
-#include <fileref.h>
+#include <MediaInfo/MediaInfo.h>
 
 //Curiously recurring template pattern:
 
@@ -24,8 +24,20 @@ public:
 	virtual ~File() = 0;
 };
 
+class MediaFile : public File
+{
+protected:
+	static MediaInfoLib::MediaInfo mMInfoHandle;
+public:
+	MediaFile() {}
+	MediaFile(const wxString & filename) : File(filename) {}
+	MediaFile(const wxFileName & wxfilename) : File(wxfilename) {}
+	virtual wxString GetLengthStr() const = 0; //length may be stored in
+										//column contents
+};
+
 template <typename T>	//T - file type
-class FileT : public File
+class MediaFileT : public MediaFile
 {
 protected:
 	//info for list
@@ -38,16 +50,16 @@ protected:
 		mColContents[0] = GetName();
 	}
 public:
-	FileT() : File(), mColContents(mColCount)
+	MediaFileT() : MediaFile(), mColContents(mColCount)
 	{
 	}
-	FileT(const wxString & filename) : File(filename), 
+	MediaFileT(const wxString & filename) : MediaFile(filename), 
 		mColContents(mColCount)
 	{
 	}
-	FileT(const wxFileName & wxfilename) : File(wxfilename),
+	MediaFileT(const wxFileName & wxfilename) : MediaFile(wxfilename),
 		mColContents(mColCount)	{}
-	virtual ~FileT()
+	virtual ~MediaFileT()
 	{
 	}
 	virtual int GetColCount() const { return mColCount; }
@@ -66,38 +78,61 @@ public:
 	virtual wxString GetCol(const int & n) const 
 	{
 		if (n >= mColCount)
-			throw MyException("FileT::GetCol(): too big argument passed",
+			throw MyException("MediaFileT::GetCol(): too big argument passed",
 					MyException::FATAL_ERROR);
 		return mColumns[n];
 	}
 	virtual int GetColSize(const int & n) const 
 	{
 		if (n >= mColCount)
-			throw MyException("FileT::GetCol(): too big argument passed",
+			throw MyException("MediaFileT::GetCol(): too big argument passed",
 					MyException::FATAL_ERROR);
 		return mColSizes[n];
 	}
 
+	virtual wxString GetTitle() const //if you don't want 
+									//track number in the title
+	{
+		return mColContents[0];
+	}
+
+
 };
 
-class MusicFile : public FileT<MusicFile>
+class MusicFile : public MediaFileT<MusicFile>
 {
-private:
-	TagLib::FileRef mTagFile;
 protected:
 	virtual void CollectInfo();
 public:
-	MusicFile() : FileT() {}
-	MusicFile(const wxString & filename) : FileT(filename),
-		mTagFile(filename.c_str())
+	MusicFile() : MediaFileT() {}
+	MusicFile(const wxString & filename) : MediaFileT(filename)
 	{
 		CollectInfo();
 	}
-	MusicFile(const wxFileName & wxfilename) : FileT(wxfilename),
-		mTagFile(wxfilename.GetFullPath())
+	MusicFile(const wxFileName & wxfilename) : MediaFileT(wxfilename)
 	{
 		CollectInfo();
+	}
+	virtual wxString GetLengthStr() const
+	{
+		if (mColContents[1].size() <= 0)
+			return wxString("0.0");
+		return mColContents[1];	
+	}
+	wxString GetArtist() const
+	{
+		return mColContents[2];
 	}
 	virtual ~MusicFile() {}
 };
 
+class VideoFile : public MediaFileT<VideoFile>
+{
+protected:
+	virtual void CollectInfo() {}
+public:
+	VideoFile() {}
+	VideoFile(const wxString & filename) : MediaFileT(filename) {}
+	VideoFile(const wxFileName & wxfilename) : MediaFileT(wxfilename) {}
+	virtual wxString GetLengthStr();
+};

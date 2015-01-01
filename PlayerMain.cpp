@@ -128,7 +128,9 @@ public:
 	{
 		return mFManager->GetFile(libName, plName, id);
 	}
-	wxFileOffset Tell();
+	void OnSearchCommand();
+	void OnStopSearchCommand();
+   	wxFileOffset Tell();
 };
 // ----------------------------------------------------------------------------
 // event tables and other macros for wxWidgets
@@ -141,11 +143,12 @@ wxBEGIN_EVENT_TABLE(PlayerFrame, wxFrame)
 	EVT_CLOSE(PlayerFrame::OnClose)
     EVT_MENU(QUIT,  PlayerFrame::OnQuit)
     EVT_MENU(ABOUT, PlayerFrame::OnAbout)
+	EVT_MENU(SEARCH, PlayerFrame::OnSearchDrive)
+	EVT_MENU(STOP_SEARCH, PlayerFrame::OnStopSearch)
    	EVT_COMMAND(wxID_ANY, EVT_SEARCHER_UPDATE, PlayerFrame::OnNewItem)
 	EVT_COMMAND(wxID_ANY, EVT_SEARCHER_COMPLETE, 
 			PlayerFrame::OnSearchCompletion)
 	EVT_BUTTON(CTRL_VOL_BUTTON, PlayerFrame::OnVolButton)
-	EVT_BUTTON(CTRL_VOL_SLIDER, PlayerFrame::OnVolume)
 	EVT_MEDIA_LOADED(MEDIA_CTRL, PlayerFrame::OnMediaLoaded)
 	EVT_MEDIA_STOP(MEDIA_CTRL, PlayerFrame::OnMediaStop)
 	EVT_MEDIA_FINISHED(MEDIA_CTRL, PlayerFrame::OnMediaFinish)
@@ -191,6 +194,10 @@ bool PlayerApp::OnInit()
     if ( !wxApp::OnInit() )
         return false;
 
+	//init MediaInfo lib
+	//MediaInfo::Options("Info_Version", "**VERSION**;**APP_NAME**;**APP_VERSION**")
+	MediaInfoLib::MediaInfo::Option_Static(
+			L"Info_Version", L"0.7.7.1;Player;0.4.2");
     // create the main application window
 	int xScreen = wxSystemSettings::GetMetric(wxSYS_SCREEN_X);
 	int yScreen = wxSystemSettings::GetMetric(wxSYS_SCREEN_Y);
@@ -205,7 +212,6 @@ bool PlayerApp::OnInit()
     // created initially)
     mFrame->Show(true);
 	mMediaCtrl = new wxMediaCtrl;
-	mMediaCtrl->SetVolume(0.5);
 
 #ifdef __WINDOWS__ //because default doesn't work for some reason
 	if (!mMediaCtrl->Create(mFrame, MEDIA_CTRL, wxEmptyString, 
@@ -223,15 +229,14 @@ bool PlayerApp::OnInit()
 	wxString extensions[5] = {"mp3", "wav", "flac", "aac", "wma"};
 	AddLib("Music", extensions, 5);
 	
-	wxString vidExtensions[5] = {".mp4", ".avi", ".flv", ".wmv", ".mov"};
+	wxString vidExtensions[5] = {"mp4", "avi", "flv", "wmv", "mov"};
 	AddLib("Video", vidExtensions, 5);
 //	//TODO: add more image formats
-	wxString picExtensions[5] = {".bmp", ".gif", ".jpeg", ".png", ".tif"};
+	wxString picExtensions[5] = {"bmp", "gif", "jpeg", "png", "tif"};
 	AddLib("Pictures", picExtensions, 5);
 	mFrame->MakeColumns("Music");
 
-	wxLogStatus(mFrame, "Searching...");
-	mFManager->Search();
+	OnSearchCommand();
 
 //	set library to which's new files we are notified as they are found
 //	const Playlist * pl = mFManager.GetPlaylist("Music", "all");
@@ -268,6 +273,7 @@ bool PlayerApp::OnExceptionInMainLoop()
 void PlayerApp::OnUnhandledException()
 {
 	 OnExceptionInMainLoop();
+	 mFManager->StopSearch();
 }
 
 void PlayerApp::AddLib(wxString name, wxString extensions[], int extN, 
@@ -312,7 +318,6 @@ void PlayerApp::MediaLoaded()
 	if (!mMediaCtrl->Play())	
 		throw MyException("Failed to play file", MyException::NOT_FATAL);
 	wxFileOffset length = mMediaCtrl->Length();
-	mFrame->SetCurrLength(length);
 	if (mSliderTimer->IsRunning())
 	{
 		mSliderTimer->Stop();
@@ -331,9 +336,17 @@ void PlayerFrame::OnMediaLoaded(wxMediaEvent& ev)
 {
 	mSecondsPlaying = 0;
 	mTimePanel->ChangeText("0.0/0.0");
+	double selection = mVolSlider->GetValue();
+	mApp->SetVolume(selection / SLIDER_MAX_VAL);
 	mApp->MediaLoaded();
 	DrawName();
 	mList->Check(mCurrItemInList, false);
+	const File * file = mApp->GetFile(mLibNames[mActiveLib], 
+			mPlaylistNames[mActiveLib][mActivePlaylist], mCurrItemId);
+	const MediaFile * mdFile = dynamic_cast<const MediaFile*>(file);
+	if (mdFile == nullptr)
+		throw MyException("PlayerFrame::OnMediaLoaded(): failed dynamic_cast to media file", MyException::FATAL_ERROR);
+	mCurrLengthStr = mdFile->GetLengthStr();
 //	for (int i = 1; i < mSelectedItems.size(); i++)
 //		Deselect(mSelectedItems[i]);
 //	Select(GetCurrSelection());
@@ -361,7 +374,6 @@ void PlayerApp::PlayNew(const wxFileName * file)
 		throw MyException("Failed to load file in PlayerApp::PlayNew()",
 				MyException::NOT_FATAL);
 	mPlayedFile = *file;
-	mFrame->mCurrName = file->GetName();
 }
 
 void PlayerFrame::OnListActivated(wxListEvent& ev)
@@ -449,9 +461,8 @@ void PlayerFrame::OnSecondTimer(wxTimerEvent& ev)
 	int seconds = off / 1000;
 	int secondsPl = seconds % 60;
 	int minutesPl = (seconds-secondsPl) / 60;
-	wxString str;
-	str.Printf(wxT("%d:%d/%d:%d"), minutesPl, secondsPl, mCurrLength[0],
-			mCurrLength[1]);
+	wxString str = FormatTime(minutesPl, secondsPl);
+	str.Printf(wxT("%s/%s"), str, mCurrLengthStr);
 	mTimePanel->ChangeText(str);
 }
 
@@ -543,3 +554,53 @@ void PlayerFrame::OnSearch(wxCommandEvent& ev)
 
 }
 
+wxString FormatTime(int minutes, int seconds)
+{
+	wxString str;
+	if (seconds < 10)
+		str.Printf("%d:0%d", minutes, seconds);
+	else
+		str.Printf("%d:%d", minutes, seconds);
+	return str;
+}
+
+const File * PlayerFrame::GetCurrFile() const
+{
+	if (mActiveLib < 0 || mActivePlaylist < 0 || mCurrItemId < 0)
+		throw MyException("PlayerFrame::GetCurrFile(): mCurrItem not set",
+				MyException::FATAL_ERROR);
+	return mApp->GetFile(mLibNames[mActiveLib], 
+		mPlaylistNames[mActiveLib][mActivePlaylist], mCurrItemId);	
+}
+
+void PlayerFrame::OnSearchDrive(wxCommandEvent& ev)
+{
+	mApp->OnSearchCommand();
+}
+
+void PlayerApp::OnSearchCommand()
+{
+	if (mFManager->GetLibCount() <= 0)
+		throw MyException("PlayerApp::OnSearchCommand(): searching but no libraries set", MyException::NOT_FATAL);
+	if (mFManager->IsSearching())
+		throw MyException("Searching already!", MyException::NOT_FATAL);
+	mFManager->Search();
+	mFrame->mFileMenu->Enable(SEARCH, false);
+	mFrame->mFileMenu->Enable(STOP_SEARCH, true);
+	wxLogStatus(mFrame, "Searching...");
+}
+
+void PlayerApp::OnStopSearchCommand()
+{
+	if (!mFManager->IsSearching())
+		throw MyException("Wasn't searching", MyException::NOT_FATAL);
+	mFManager->StopSearch();
+	mFrame->mFileMenu->Enable(SEARCH, true);
+	mFrame->mFileMenu->Enable(STOP_SEARCH, false);
+	wxLogStatus(mFrame, "Searching stopped");
+}
+
+void PlayerFrame::OnStopSearch(wxCommandEvent& ev)
+{
+	mApp->OnStopSearchCommand();
+}

@@ -10,7 +10,7 @@ PlayerFrame::PlayerFrame(const wxString& title, wxPoint &pos,
 		wxSize &size, PlayerApp * pApp)
        : wxFrame(NULL, wxID_ANY, title, pos, size), mApp(pApp), 
        mActiveLib(0), mDontStoreSelection(false), mSliderTimer(this),
-	   mCurrItemId(-1), mSecondsPlaying(0), mCurrName(""), 
+	   mCurrItemId(-1), mSecondsPlaying(0), 
 	   mActivePlaylist(0), mCurrItemInList(-1)
 {
     // set the frame icon
@@ -18,17 +18,19 @@ PlayerFrame::PlayerFrame(const wxString& title, wxPoint &pos,
 
 #if wxUSE_MENUS
     // create a menu bar
-    wxMenu *fileMenu = new wxMenu;
+    mFileMenu = new wxMenu;
 
     // the "About" item should be in the help menu
     wxMenu *helpMenu = new wxMenu;
     helpMenu->Append(ABOUT, "&About\tF1", "Show about dialog");
 
-    fileMenu->Append(QUIT, "E&xit\tAlt-X", "Quit this program");
+	mFileMenu->Append(SEARCH, "Search drive", "Search hard disk again");
+	mFileMenu->Append(STOP_SEARCH, "Stop search", "Stop searching hard disk");
+    mFileMenu->Append(QUIT, "E&xit\tAlt-X", "Quit this program");
 
-    // now append the freshly created menu to the menu bar...
+   	// now append the freshly created menu to the menu bar...
     wxMenuBar *menuBar = new wxMenuBar();
-    menuBar->Append(fileMenu, "&File");
+    menuBar->Append(mFileMenu, "&File");
     menuBar->Append(helpMenu, "&Help");
 
     // ... and attach this menu bar to the frame
@@ -38,7 +40,7 @@ PlayerFrame::PlayerFrame(const wxString& title, wxPoint &pos,
     // create a status bar just for fun (by default with 1 pane only)
     CreateStatusBar(2);
 
-	mCurrLength[0] = mCurrLength[1] = 0;
+	mCurrLengthStr = "0.0";
 
 	wxBoxSizer * mainSizer = new wxBoxSizer(wxVERTICAL);
 	wxBoxSizer * sizer1 = new wxBoxSizer(wxHORIZONTAL);
@@ -90,17 +92,30 @@ PlayerFrame::PlayerFrame(const wxString& title, wxPoint &pos,
 		   	maxSliderVal, wxPoint(btPos.x, btPos.y+5), wxSize(400, 20));
    	wxFont font;
 	font.SetPointSize(14);
-	mTextPanel = new TextPanel(sliderTextPan, "", font, "WHITE", 
-			wxPoint(0, 10));
-	mTimePanel = new TextPanel(sliderTextPan, wxPoint(-1, -1), 
-			wxSize(100, 15));
+	mTextPanel = new TextPanel(sliderTextPan, wxPoint(0,0),
+			wxSize(100,font.GetPixelSize().y+10), "", font, "WHITE", 
+			wxPoint(0, 9));
+	wxPanel * timeArtistPan = new wxPanel(sliderTextPan, wxID_ANY);
+	timeArtistPan->SetBackgroundColour(wxTheColourDatabase->
+			Find("DARK GREY"));
+	wxBoxSizer * timeArtistSizer = new wxBoxSizer(wxHORIZONTAL);
+	mTimePanel = new TextPanel(timeArtistPan, wxPoint(-1, -1),
+			wxSize(100, 19));
+	mTimePanel->mMode = TextPanel::RIGHT_SIDE;
+	mArtistPanel = new TextPanel(timeArtistPan, wxPoint(-1, -1),
+			wxSize(100, 19));
+	mArtistPanel->SetBackgroundColour(wxTheColourDatabase->Find(
+				"DARK GREY"));
 	mTimePanel->SetBackgroundColour(wxTheColourDatabase->Find(
 				"DARK GREY"));
 	mTextPanel->SetBackgroundColour(wxTheColourDatabase->Find(
 				"DARK GREY"));
-	sliderTextSizer->Add(mTextPanel, 2, wxEXPAND);
-	sliderTextSizer->Add(mTimePanel, 0);
-	sliderTextSizer->Add(mSlider, 1, wxEXPAND);
+	timeArtistSizer->Add(mArtistPanel, 1);
+	timeArtistSizer->Add(mTimePanel, 1);
+	timeArtistPan->SetSizerAndFit(timeArtistSizer);
+	sliderTextSizer->Add(mTextPanel, 0, wxEXPAND);
+	sliderTextSizer->Add(timeArtistPan, 0, wxEXPAND);
+	sliderTextSizer->Add(mSlider, 0, wxEXPAND);
 	sliderTextPan->SetSizerAndFit(sliderTextSizer);
 	sizer1->Add(sliderTextPan, 6);
 	wxPanel * picturePanel = new wxPanel(mMediaCtrlsPanel, wxID_ANY,
@@ -224,6 +239,8 @@ void PlayerFrame::AddListItem(const File * file)
 		throw MyException(
 "PlayerFrame::AddListItem() col counts in list and file are different",
 			MyException::FATAL_ERROR);
+	if (file->GetColContent(0).size() == 0)
+		mList->SetItem(item.GetId(), 0, file->GetName());
 	for (int i = 1; i < mList->GetColumnCount(); i++)
 	{
 		mList->SetItem(item.GetId(), i, file->GetColContent(i));
@@ -232,6 +249,7 @@ void PlayerFrame::AddListItem(const File * file)
 
 void PlayerFrame::OnNewItem(wxCommandEvent& evt)
 {
+	//TODO also check which playlist
 	if (mSearchBox->GetValue().size() > 0)
 		return;
 	mListMap.push_back(mList->GetItemCount());
@@ -360,7 +378,21 @@ void PlayerFrame::DrawName()
 	if (mCurrItemId == -1)
 		throw MyException("mCurrItemId is not set", 
 				MyException::NOT_FATAL);
-	mTextPanel->ChangeText(mCurrName);
+	const File * file = GetCurrFile();
+	const MusicFile * aFile = dynamic_cast<const MusicFile*>(file);
+	wxString str;
+	if (aFile != nullptr)
+	{
+		str = aFile->GetTitle();
+		wxString artist = aFile->GetArtist();
+		if (artist.size() > 0)
+		{
+			mArtistPanel->ChangeText(artist);
+		}
+	}	
+	else
+		str = file->GetName();
+	mTextPanel->ChangeText(str);
 }
 
 void PlayerFrame::DrawTime()

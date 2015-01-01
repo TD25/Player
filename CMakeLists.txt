@@ -60,18 +60,16 @@ add_executable(Player WIN32 ${SRCS})
  
 set(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} "${CMAKE_SOURCE_DIR}/CMakeModules")
 #configure taglib
-find_package(Taglib 1.9.1 REQUIRED)
-if (TAGLIB_FOUND)
-	add_definitions(${TAGLIB_CFLAGS} ${TAGLIB_LIBRARIES} -lz)
-# We add to our target 'minimal' the wxWidgets libraries. These are
-# set for us by the find script. If you need other libraries, you
-# can add them here as well. 
-	if (UNIX)
-#TODO: this might not work on other systems:
-		target_link_libraries(Player ${wxWidgets_LIBRARIES} ${TAGLIB_LIBRARIES}	"/lib/x86_64-linux-gnu/libz.so.1")
-	else()
-		target_link_libraries(Player ${wxWidgets_LIBRARIES} ${TAGLIB_LIBRARIES})
-	endif()
+find_package(MediaInfoLib 0.7.71 REQUIRED)
+if (MEDIAINFOLIB_FOUND)
+	add_definitions(${MEDIAINFOLIB_DEFINITIONS})
+	#	add_definitions(-lmediainfo -lzen -lz -lpthread -DUNICODE)
+	include_directories(${MEDIAINFOLIB_INCLUDE_DIRS})
+	message("MediaInfo include dirs:" ${MEDIAINFOLIB_INCLUDE_DIRS})
+	message("MediaInfo libs: " ${MEDIAINFOLIB_LIBRARIES})
+	message("MediaInfo definitions: " ${MEDIAINFOLIB_DEFINITIONS})
+	message("wxWidgets libraries: " ${wxWidgets_LIBRARIES})
+	target_link_libraries(Player ${wxWidgets_LIBRARIES} ${MEDIAINFOLIB_LIBRARIES})
 endif()
 
 set( CMAKE_EXPORT_COMPILE_COMMANDS 1 )
