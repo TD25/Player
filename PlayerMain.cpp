@@ -52,11 +52,12 @@ private:
 	FileManager * mFManager;
 	PlayerFrame * mFrame;
 	wxMediaCtrl * mMediaCtrl;
-	wxFileName mPlayedFile;
+	const File * mPlayedFile;
 	wxTimer * mSliderTimer;
 	wxTimer * mSecondTimer;
 public:
     // override base class virtuals
+	PlayerApp() : mMediaCtrl(nullptr), wxApp() {}
     // ----------------------------
     // this one is called on application startup and is a good place for the app
     // initialization (doing it here and not in the ctor allows to have an error
@@ -77,7 +78,7 @@ public:
 			const long id); 
 	void Pause();
 	void MediaLoaded();
-	void PlayNew(const wxFileName * file);
+	void PlayNew(const File * file);
 	bool IsPlaying()
 	{
 		if (mMediaCtrl->GetState() == wxMEDIASTATE_PLAYING)
@@ -103,8 +104,11 @@ public:
 	}
 	void Seek(double part)
 	{
-		bool playing = (mMediaCtrl->GetState() == wxMEDIASTATE_PLAYING);
-		wxFileOffset length = mMediaCtrl->Length();
+//		bool playing = (mMediaCtrl->GetState() == wxMEDIASTATE_PLAYING);
+		const MediaFile * medFile = dynamic_cast<const MediaFile*>(mPlayedFile);
+		if (medFile == nullptr)
+			return;
+		wxFileOffset length = medFile->GetLength();
 		wxFileOffset off = length * part;
 		if (off == 0)
 			off = 1;
@@ -131,6 +135,8 @@ public:
 	void OnSearchCommand();
 	void OnStopSearchCommand();
    	wxFileOffset Tell();
+	void SetVideoMode(bool show);
+	void SetVideoSize(const wxPoint & pos, const wxSize & size);
 };
 // ----------------------------------------------------------------------------
 // event tables and other macros for wxWidgets
@@ -165,6 +171,7 @@ wxBEGIN_EVENT_TABLE(PlayerFrame, wxFrame)
 	EVT_BUTTON(CTRL_FORWARD, PlayerFrame::OnForward)
 	EVT_BUTTON(CTRL_REVERSE, PlayerFrame::OnReverse)
 	EVT_TEXT(CTRL_SEARCH, PlayerFrame::OnSearch)
+	EVT_SIZE(PlayerFrame::OnSize)
 wxEND_EVENT_TABLE()
 
 //define events sent by worker threads
@@ -196,8 +203,8 @@ bool PlayerApp::OnInit()
 
 	//init MediaInfo lib
 	//MediaInfo::Options("Info_Version", "**VERSION**;**APP_NAME**;**APP_VERSION**")
-	MediaInfoLib::MediaInfo::Option_Static(
-			L"Info_Version", L"0.7.7.1;Player;0.4.2");
+	//MediaInfoLib::MediaInfo::Option_Static(
+	//		L"Info_Version", L"0.7.7.1;Player;0.4.2");
     // create the main application window
 	int xScreen = wxSystemSettings::GetMetric(wxSYS_SCREEN_X);
 	int yScreen = wxSystemSettings::GetMetric(wxSYS_SCREEN_Y);
@@ -212,7 +219,6 @@ bool PlayerApp::OnInit()
     // created initially)
     mFrame->Show(true);
 	mMediaCtrl = new wxMediaCtrl;
-
 #ifdef __WINDOWS__ //because default doesn't work for some reason
 	if (!mMediaCtrl->Create(mFrame, MEDIA_CTRL, wxEmptyString, 
 		wxDefaultPosition, wxDefaultSize, 0, wxMEDIABACKEND_WMP10))
@@ -222,11 +228,12 @@ bool PlayerApp::OnInit()
 	if (!mMediaCtrl->Create(mFrame, MEDIA_CTRL))
 		throw MyException("Can't create wxMediaCtrl", 
 				MyException::FATAL_ERROR);
-#endif //__WINDOWS__
+#endif //__WINDOWS__	
+	mMediaCtrl->Hide();
 
 	mFManager = new FileManager(mFrame);
 	//add libs and start searching
-	wxString extensions[5] = {"mp3", "wav", "flac", "aac", "wma"};
+	wxString extensions[5] = {"mp3", "flac", "aac", "wma"};
 	AddLib("Music", extensions, 5);
 	
 	wxString vidExtensions[5] = {"mp4", "avi", "flv", "wmv", "mov"};
@@ -287,10 +294,10 @@ void PlayerApp::Play(const wxString & libName, const wxString & plName,
 		const long id)
 {
 
-	const wxFileName * file = mFManager->GetFile(libName, plName, id);	
+	const File * file = mFManager->GetFile(libName, plName, id);	
 	if (mMediaCtrl->GetState() == wxMEDIASTATE_PLAYING)
 	{
-		if (*file == mPlayedFile)
+		if (file == mPlayedFile)
 			throw MyException("Tried to play, but already playing",
 				MyException::NOT_FATAL);
 		else
@@ -298,7 +305,7 @@ void PlayerApp::Play(const wxString & libName, const wxString & plName,
 	}
 	else if (mMediaCtrl->GetState() == wxMEDIASTATE_PAUSED)
 	{
-		if (mPlayedFile == *file)
+		if (mPlayedFile == file)
 		{
 			mMediaCtrl->Play();
 			mSliderTimer->Start(-1);
@@ -317,7 +324,12 @@ void PlayerApp::MediaLoaded()
 {
 	if (!mMediaCtrl->Play())	
 		throw MyException("Failed to play file", MyException::NOT_FATAL);
-	wxFileOffset length = mMediaCtrl->Length();
+	const MediaFile * medFile = dynamic_cast<const MediaFile*>(mPlayedFile);
+	if (medFile->GetType() == "Video")
+		SetVideoMode(true);
+	wxFileOffset length = 0;
+	if (medFile != nullptr)
+		length = medFile->GetLength();
 	if (mSliderTimer->IsRunning())
 	{
 		mSliderTimer->Stop();
@@ -366,14 +378,14 @@ void PlayerFrame::OnPlayBt(wxCommandEvent& ev)
 		mApp->Pause();
 }
 
-void PlayerApp::PlayNew(const wxFileName * file)
+void PlayerApp::PlayNew(const File * file)
 {
 	wxString path = file->GetFullPath();
 	mFrame->ResetSlider();
 	if (!mMediaCtrl->Load(path))
 		throw MyException("Failed to load file in PlayerApp::PlayNew()",
 				MyException::NOT_FATAL);
-	mPlayedFile = *file;
+	mPlayedFile = file;
 }
 
 void PlayerFrame::OnListActivated(wxListEvent& ev)
@@ -397,8 +409,12 @@ void PlayerApp::Pause()
 
 void PlayerFrame::OnMediaFinish(wxMediaEvent& ev)
 {
+	wxString str;
+	str.Printf(wxT("%s/%s"), mCurrLengthStr, mCurrLengthStr);
+	mTimePanel->ChangeText(str);
 	mSlider->SetValue(SLIDER_MAX_VAL);
 	mApp->StopTimer();
+
 	if (mCheckedItems.size() > 0)
 	{
 		mCurrItemInList = mCheckedItems[0];
@@ -603,4 +619,40 @@ void PlayerApp::OnStopSearchCommand()
 void PlayerFrame::OnStopSearch(wxCommandEvent& ev)
 {
 	mApp->OnStopSearchCommand();
+}
+
+void PlayerApp::SetVideoMode(bool full)
+{
+	static wxPoint prevPos;
+	static wxSize prevSize;
+	if (full)
+	{
+		prevPos = mFrame->GetPosition();
+		prevSize = mFrame->GetSize();
+		mFrame->Maximize(true);
+		mMediaCtrl->Show(true);
+	}
+	else
+	{
+		mFrame->SetPosition(prevPos);
+		mFrame->SetSize(prevSize);
+		mMediaCtrl->Hide();
+	}
+}
+
+void PlayerApp::SetVideoSize(const wxPoint & pos, const wxSize & size)
+{
+	if (mMediaCtrl == nullptr)
+		return;
+	mMediaCtrl->SetPosition(pos);
+	mMediaCtrl->SetSize(size);
+}
+
+void PlayerFrame::OnSize(wxSizeEvent& ev)
+{
+	ev.Skip();
+	wxSize size(ev.GetSize().x, 
+			ev.GetSize().y-mMediaCtrlsPanel->GetSize().y);
+	wxPoint pos(0, mMediaCtrlsPanel->GetSize().y);
+	mApp->SetVideoSize(pos, size);
 }

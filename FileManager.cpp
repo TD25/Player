@@ -7,8 +7,9 @@
 	#include <string>
 #endif
 
-ListUpdateEv::ListUpdateEv(const File * file) : 
-	wxCommandEvent(EVT_SEARCHER_UPDATE), mpFile(file)	
+ListUpdateEv::ListUpdateEv(const File * file, const wxString & plName) : 
+	wxCommandEvent(EVT_SEARCHER_UPDATE), mpFile(file), 
+	mPlaylistName(plName)	
 	{}
 
 void FileManager::AddLib(MediaLibrary lib)
@@ -174,11 +175,27 @@ wxDirTraverseResult
 						throw;
 				}
 			}
+			else if (type == "Video")
+			{
+				try
+				{
+					file = new VideoFile(name);
+				}
+				catch (MyException & exc)
+				{
+					//if failed to initialize object don't put it in the list
+					if (exc.type == MyException::NOT_FATAL)
+						return wxDIR_CONTINUE; 
+					else
+						throw;
+				}
+
+			}
 			else //TODO: create other file types
 				return wxDIR_CONTINUE;
 			mFManager->mFiles.push_back(file);
 			mFManager->mLibs[ind].AddFile(mFManager->mFiles.back());
-			wxQueueEvent(mHandlerFrame, new ListUpdateEv(file));
+			wxQueueEvent(mHandlerFrame, new ListUpdateEv(file, "all"));
 		}
 		return wxDIR_CONTINUE;
 	}
@@ -188,6 +205,7 @@ wxDirTraverseResult
 		return wxDIR_STOP;
 	}
 }
+
 wxDirTraverseResult 
 	FileManager::SearcherThread::OnDir(const wxString& dirname)
 {

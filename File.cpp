@@ -1,9 +1,14 @@
 #include "File.h"
 
-MediaInfoLib::MediaInfo MediaFile::mMInfoHandle;
-const wxString musicCols[] = {"Title", "Time", "Artist",
+using namespace MediaInfoNamespace;
+
+MediaInfo MediaFile::mMInfoHandle;
+static const wxString musicCols[] = {"Title", "Time", "Artist",
 	"Album", "Genre"};
-const int musicColSizes[] = {6, 1, 3, 3, 3};
+static const int musicColSizes[] = {6, 1, 3, 3, 3};
+static const wxString videoCols[] = {"Title", "Time", "Format", 
+	"Dimensions"};
+static const int videoColSizes[] = {6, 1, 3, 2};
 
 template<>
 const int MediaFileT<MusicFile>::mColCount = 5;
@@ -11,31 +16,35 @@ template<>
 const wxString * MediaFileT<MusicFile>::mColumns = musicCols;
 template<>
 const int * MediaFileT<MusicFile>::mColSizes = musicColSizes;
+template<>
+const int MediaFileT<VideoFile>::mColCount = 4;
+template<>
+const wxString * MediaFileT<VideoFile>::mColumns = videoCols;
+template<>
+const int * MediaFileT<VideoFile>::mColSizes = videoColSizes;
 
 void MusicFile::CollectInfo()
 {
 	wxString path = GetFullPath();
 	bool r = mMInfoHandle.Open(path.ToStdWstring());
-	//TODO get length and other things from taglib
 	if (!r)
 		throw MyException("MusicFile::CollectInfo(): failed to initialise tagfile", MyException::NOT_FATAL);
 
-	mColContents[0] = mMInfoHandle.Get(MediaInfoLib::Stream_General,
+	mColContents[0] = mMInfoHandle.Get(Stream_General,
 			0, L"Title").c_str();
-	wxString timeStr = mMInfoHandle.Get(MediaInfoLib::Stream_General,
-			0, L"Duration/String3").c_str();
-	if (timeStr.size() >= 9)
-	{
-		if (timeStr[0] == '0')
-			mColContents[1] = timeStr.substr(4, 4);
-		else
-			mColContents[1] = timeStr.substr(3, 5);
-	}
-	mColContents[2] = mMInfoHandle.Get(MediaInfoLib::Stream_General, 
+	wxString timeStr = mMInfoHandle.Get(Stream_General,
+			0, L"Duration").c_str();
+	long mSecs;
+	timeStr.ToLong(&mSecs, 10);
+	int seconds = (mSecs / 1000);
+	int secs = seconds % 60;
+	int minutes = (seconds - secs) / 60;
+	mColContents[1] = FormatTime(minutes, secs);
+	mColContents[2] = mMInfoHandle.Get(Stream_General, 
 			0, L"Performer");
-	mColContents[3] =  mMInfoHandle.Get(MediaInfoLib::Stream_General, 
+	mColContents[3] =  mMInfoHandle.Get(Stream_General, 
 			0, L"Album");
-	mColContents[4] = mMInfoHandle.Get(MediaInfoLib::Stream_General, 
+	mColContents[4] = mMInfoHandle.Get(Stream_General, 
 			0, L"Genre");
 	mMInfoHandle.Close();
 }
@@ -44,4 +53,44 @@ File::~File()
 {
 }
 
+wxFileOffset MediaFile::GetLength() const
+{
+	bool r = mMInfoHandle.Open(GetFullPath().ToStdWstring());		
+	if (!r)
+		throw MyException("MediaFile::GetLength(): MediaInfo failed\
+				to open file", MyException::NOT_FATAL);
+	wxString str = mMInfoHandle.Get(Stream_General,
+			0, L"Duration").c_str();
+	long l;
+	str.ToLong(&l, 10);
+	mMInfoHandle.Close();
+	return l;
+}
 
+void VideoFile::CollectInfo()
+{
+	wxString path = GetFullPath();
+	bool r = mMInfoHandle.Open(path.ToStdWstring());
+	if (!r)
+		throw MyException("MusicFile::CollectInfo(): failed to initialise tagfile", MyException::NOT_FATAL);
+
+	mColContents[0] = mMInfoHandle.Get(Stream_General,
+			0, L"Title").c_str();
+	wxString str = mMInfoHandle.Get(Stream_General,
+			0, L"Duration").c_str();
+	long mSecs;
+	str.ToLong(&mSecs, 10);
+	int seconds = (mSecs / 1000);
+	int secs = seconds % 60;
+	int minutes = (seconds - secs) / 60;
+	mColContents[1] = FormatTime(minutes, secs);
+	mColContents[2] = mMInfoHandle.Get(Stream_Video,
+			0, L"Format").c_str();
+	str = mMInfoHandle.Get(Stream_Video,
+		0, L"Width").c_str();	
+	wxString height = mMInfoHandle.Get(Stream_Video,
+			0, L"Height").c_str();
+	str.Printf("%s x %s", str, height);
+	mColContents[3] = str;
+	mMInfoHandle.Close();
+}

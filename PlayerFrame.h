@@ -35,18 +35,28 @@ enum
 	CTRL_VOL_SLIDER,
 	MEDIA_CTRL,
 	TIMER_SLIDER,
-	TIMER_TIME
+	TIMER_TIME,
+	CTRL_LIB_SELECT_BUTTON //KEEP THIS LAST
 };
 
 class ListUpdateEv : public wxCommandEvent
 {
 private:
 	const File * mpFile;
+	wxString mPlaylistName;
 public:
-	ListUpdateEv(const File * file);
+	ListUpdateEv(const File * file, const wxString & playlistName);
 	const File * GetFile() {return mpFile;}
 	 // implement the base class pure virtual
 	virtual wxEvent *Clone() const { return new ListUpdateEv(*this); }
+	wxString GetType() const
+	{
+		return mpFile->GetType();
+	}
+	wxString GetPlaylistName() const
+	{
+		return mPlaylistName;
+	}
 };
 
 class PlayerApp;
@@ -66,6 +76,8 @@ public:
 	void OnSearchCompletion(wxCommandEvent& event) 
 	{
 		wxLogStatus(this, "Search complete");
+		mFileMenu->Enable(SEARCH, true);
+		mFileMenu->Enable(STOP_SEARCH, false);
 	}
 	void OnClose(wxCloseEvent &);
 	void OnVolButton(wxCommandEvent& ev);
@@ -93,6 +105,8 @@ public:
 	void OnSlider(wxScrollEvent& ev);
 	void OnSearchDrive(wxCommandEvent& ev);
 	void OnStopSearch(wxCommandEvent& ev);
+	void OnLibButton(wxCommandEvent& ev);
+	void OnSize(wxSizeEvent& ev);
 	void DrawName();
 	void DrawTime();
 	void ResetSlider()
@@ -104,6 +118,7 @@ public:
 		mCurrLengthStr = length;
 	}
 	void MakeColumns(const wxString & lib);
+	void AddMediaCtrl(const wxMediaCtrl & mediaCtrl);
 private:
 	long GetCurrSelection() const;	//determines selection in the list
 	long GetCurrSelectionInList() const;
@@ -143,5 +158,4 @@ private:
 	friend PlayerApp;
 	wxSize mOrgSize;
 };
-
 

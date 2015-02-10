@@ -3,7 +3,14 @@
 #include "Common.h"
 #include "wx/vector.h"
 #include "wx/string.h"
-#include <MediaInfo/MediaInfo.h>
+#ifdef MEDIAINFO_DLL
+	#include <MediaInfoDLL/MediaInfoDLL.h>
+	#define MediaInfoNamespace MediaInfoDLL;
+#else //MEDIAINFO_DLL
+	#include <MediaInfo/MediaInfo.h>
+	#define MediaInfoNamespace MediaInfoLib;
+#endif	//MEDIAINFO_DLL
+using namespace MediaInfoNamespace;
 
 //Curiously recurring template pattern:
 
@@ -21,19 +28,21 @@ public:
 	virtual wxVector<wxString> GetColNames() const = 0;
 	virtual wxString GetCol(const int & n) const = 0;
 	virtual int GetColSize(const int & n) const = 0;
+	virtual wxString GetType() const = 0;
 	virtual ~File() = 0;
 };
 
 class MediaFile : public File
 {
 protected:
-	static MediaInfoLib::MediaInfo mMInfoHandle;
+	static MediaInfo mMInfoHandle;
 public:
 	MediaFile() {}
 	MediaFile(const wxString & filename) : File(filename) {}
 	MediaFile(const wxFileName & wxfilename) : File(wxfilename) {}
 	virtual wxString GetLengthStr() const = 0; //length may be stored in
 										//column contents
+	virtual wxFileOffset GetLength() const; //in miliseconds
 };
 
 template <typename T>	//T - file type
@@ -95,8 +104,6 @@ public:
 	{
 		return mColContents[0];
 	}
-
-
 };
 
 class MusicFile : public MediaFileT<MusicFile>
@@ -123,16 +130,35 @@ public:
 	{
 		return mColContents[2];
 	}
+	virtual wxString GetType() const
+	{
+		return "Music";
+	}
 	virtual ~MusicFile() {}
 };
 
 class VideoFile : public MediaFileT<VideoFile>
 {
 protected:
-	virtual void CollectInfo() {}
+	virtual void CollectInfo();
 public:
 	VideoFile() {}
-	VideoFile(const wxString & filename) : MediaFileT(filename) {}
-	VideoFile(const wxFileName & wxfilename) : MediaFileT(wxfilename) {}
-	virtual wxString GetLengthStr();
+	VideoFile(const wxString & filename) : MediaFileT(filename) 
+	{
+		CollectInfo();
+	}
+	VideoFile(const wxFileName & wxfilename) : MediaFileT(wxfilename) 
+	{
+		CollectInfo();
+	}
+	virtual wxString GetLengthStr() const
+	{
+		if (mColContents[1].size() <= 0)
+			return wxString("0.0");
+		return mColContents[1];	
+	}
+	virtual wxString GetType() const
+	{
+		return "Video";
+	}
 };

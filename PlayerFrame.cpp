@@ -218,7 +218,9 @@ void PlayerFrame::AddLib(wxString label, wxString columns[], int n)
 		wxSizerItem * item = mLibsSizer->GetItem(buttons[i]);
 		item->SetMinSize(size);
 	}	
-	buttons.push_back(new wxButton(mLibsPanel, wxID_ANY, label, 
+	int num = buttons.size();
+	buttons.push_back(new wxButton(mLibsPanel, 
+				CTRL_LIB_SELECT_BUTTON+num, label, 
 				wxPoint(), size));
 	buttons.back()->SetBackgroundColour(wxTheColourDatabase->
 			Find("DARK GREY"));
@@ -226,6 +228,10 @@ void PlayerFrame::AddLib(wxString label, wxString columns[], int n)
 	mLibsSizer->Add(buttons.back(), 1, wxALIGN_CENTER | 
 			wxALIGN_CENTER_HORIZONTAL);
 	mLibsPanel->SetSizerAndFit(mLibsSizer);
+
+	//register event
+	Bind(wxEVT_BUTTON, &PlayerFrame::OnLibButton, this,
+			CTRL_LIB_SELECT_BUTTON+num);
 }
 
 
@@ -255,7 +261,12 @@ void PlayerFrame::OnNewItem(wxCommandEvent& evt)
 	mListMap.push_back(mList->GetItemCount());
 	ListUpdateEv * ev = dynamic_cast<ListUpdateEv*>(&evt);
 	assert(ev != NULL);
-	AddListItem(ev->GetFile());
+	const File * file = ev->GetFile();
+	wxString lib = file->GetType();
+	wxString plName = ev->GetPlaylistName();
+	if (lib == mLibNames[mActiveLib] && 
+			plName == mPlaylistNames[mActiveLib][mActivePlaylist])
+		AddListItem(file);
 }
 
 void PlayerFrame::OnClose(wxCloseEvent & evt)
@@ -419,20 +430,34 @@ long PlayerFrame::GetCurrSelectionInList() const
 
 void PlayerFrame::MakeColumns(const wxString & lib)
 {
+	File * file;
 	if (lib == "Music")
+		file = new MusicFile;
+	else if (lib == "Video")
+		file = new VideoFile;
+	else 
+		return;
+	int n = file->GetColCount();
+	//get sizes sum for 
+	//calculating real sizes from relative ones
+	int sizeSum = 0;
+	for (int i = 0; i < n; i++)
+		sizeSum += file->GetColSize(i);
+	for (int i = 0; i < n; i++)
 	{
-		MusicFile file;
-		int n = file.GetColCount();
-		//get sizes sum for 
-			//calculating real sizes from relative ones
-		int sizeSum = 0;
-		for (int i = 0; i < n; i++)
-			sizeSum += file.GetColSize(i);
-		for (int i = 0; i < n; i++)
-		{
-			int size = ((double)file.GetColSize(i)/sizeSum)*
-				mList->GetSize().x;
-			mList->AppendColumn(file.GetCol(i), wxLIST_FORMAT_LEFT, size);
-		}
+		int size = ((double)file->GetColSize(i)/sizeSum)*
+			mList->GetSize().x;
+		mList->AppendColumn(file->GetCol(i), wxLIST_FORMAT_LEFT, size);
 	}
+	delete file;
+}
+
+void PlayerFrame::OnLibButton(wxCommandEvent& ev)
+{
+	int id = ev.GetId();	
+	mActiveLib = id - CTRL_LIB_SELECT_BUTTON;
+	mActivePlaylist = 0;
+	mList->DeleteAllColumns();
+	MakeColumns(mLibNames[mActiveLib]);
+	OnSearch(ev);
 }

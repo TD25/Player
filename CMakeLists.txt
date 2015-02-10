@@ -2,7 +2,6 @@ cmake_minimum_required(VERSION 2.6.2)
  
 #our project is called Player for now 
 project(Player)
-
  
 # Location where cmake first looks for cmake modules.
 set(CMAKE_MODULE_PATH "${PROJECT_SOURCE_DIR}")
@@ -42,10 +41,6 @@ set(SRCS PlayerMain.cpp checkedlistctrl.cpp FileManager.cpp
 #	 set(SRCS ${SRCS} minimal.rc)
 #endif(WIN32)
 
-if(WIN32)
-	add_definitions(-static)
-endif(WIN32)
-
 set(DEBUG ON CACHE BOOL "Load debug symbols or not") 
 
 if (${DEBUG} STREQUAL ON)
@@ -57,12 +52,42 @@ endif(${DEBUG} STREQUAL ON)
 # the above paths and defines will be used in this build
 
 add_executable(Player WIN32 ${SRCS})
- 
+
+
 set(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} "${CMAKE_SOURCE_DIR}/CMakeModules")
-#configure taglib
-find_package(MediaInfoLib 0.7.71 REQUIRED)
+#configure MediainfoLib
+if (UNIX)
+	find_package(MediaInfoLib 0.7.71 REQUIRED)
+elseif (WIN32)
+	set(USE_MEDIAINFO_DLL FALSE CACHE BOOL "If true loads uses dll, else tries to use static library")
+	if (${USE_MEDIAINFO_DLL} STREQUAL ON)
+		add_definitions(-DMEDIAINFO_DLL)
+		message("using media info dll")
+	endif(${USE_MEDIAINFO_DLL} STREQUAL ON)
+ 
+	  set(MEDIAINFOLIB_DEFINITIONS -DMEDIAINFOLIB)
+	  set(MEDIAINFOLIB_SOURCE CACHE PATH "Path to MediaInfoLib source") 
+	  if (${USE_MEDIAINFO_DLL} STREQUAL ON)
+		  set(MEDIAINFOLIB_DLL CACHE FILEPATH "Path to MediaInfo .dll, or .so file")
+	  else (${USE_MEDIAINFO_DLL} STREQUAL ON)
+		  set(MEDIAINFOLIB_LIB CACHE FILEPATH "Path to MediaInfo .lib or .a file")
+	  endif(${USE_MEDIAINFO_DLL} STREQUAL ON)
+	  set(ZENLIB_PATH CACHE PATH  "Path to Zenlib source")
+	  if ((EXISTS ${MEDIAINFOLIB_SOURCE}) AND (EXISTS ${MEDIAINFOLIB_LIB} OR EXISTS ${MEDIAINFOLIB_DLL}))
+	  	set(MEDIAINFOLIB_INCLUDE_DIRS "${MEDIAINFOLIB_SOURCE}/Source/")
+	  	if (${USE_MEDIAINFO_DLL} STREQUAL ON)
+			set(MEDIAINFOLIB_LIBRARIES ${MEDIAINFOLIB_DLL})
+		else()
+			set(MEDIAINFOLIB_LIBRARIES ${MEDIAINFOLIB_LIB})
+		endif (${USE_MEDIAINFO_DLL} STREQUAL ON)
+			
+		set(MEDIAINFOLIB_FOUND TRUE)
+		include_directories(${ZENLIB_PATH}/Source/)
+	else()
+		message(FATAL_ERROR "Paths to mediainfolib not set, library not found")
+	endif()
+endif(UNIX)
 if (MEDIAINFOLIB_FOUND)
-	add_definitions(${MEDIAINFOLIB_DEFINITIONS})
 	#	add_definitions(-lmediainfo -lzen -lz -lpthread -DUNICODE)
 	include_directories(${MEDIAINFOLIB_INCLUDE_DIRS})
 	message("MediaInfo include dirs:" ${MEDIAINFOLIB_INCLUDE_DIRS})
