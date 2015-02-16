@@ -82,8 +82,9 @@ public:
 	void OnClose(wxCloseEvent &);
 	void OnVolButton(wxCommandEvent& ev);
 	void OnMediaLoaded(wxMediaEvent& ev);
-	void OnMediaStop(wxMediaEvent& ev) {}
+	void OnMediaStop(wxMediaEvent& ev);
 	void OnMediaFinish(wxMediaEvent& ev);
+	void OnMediaPlay(wxMediaEvent& ev);
 	void OnPlayBt(wxCommandEvent& ev);
 	void OnSearch(wxCommandEvent& ev);
 	void OnForward(wxCommandEvent& ev);

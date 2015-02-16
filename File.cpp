@@ -23,6 +23,23 @@ const wxString * MediaFileT<VideoFile>::mColumns = videoCols;
 template<>
 const int * MediaFileT<VideoFile>::mColSizes = videoColSizes;
 
+MediaFile::MediaFile()
+{
+	mMInfoHandle.Option(L"ParseSpeed", L"0");
+}
+
+MediaFile::MediaFile(const wxFileName & wxfilename) : File(wxfilename) 
+{
+
+	mMInfoHandle.Option(L"ParseSpeed", L"0");
+}
+
+MediaFile::MediaFile(const wxString & filename) : File(filename) 
+{
+	
+	mMInfoHandle.Option(L"ParseSpeed", L"0");
+}
+
 void MusicFile::CollectInfo()
 {
 	wxString path = GetFullPath();
@@ -70,7 +87,10 @@ wxFileOffset MediaFile::GetLength() const
 void VideoFile::CollectInfo()
 {
 	wxString path = GetFullPath();
+	
+	wxMessageOutputDebug().Printf("opening " + path);
 	bool r = mMInfoHandle.Open(path.ToStdWstring());
+	wxMessageOutputDebug().Printf("opened");
 	if (!r)
 		throw MyException("MusicFile::CollectInfo(): failed to initialise tagfile", MyException::NOT_FATAL);
 

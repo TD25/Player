@@ -258,7 +258,6 @@ void PlayerFrame::OnNewItem(wxCommandEvent& evt)
 	//TODO also check which playlist
 	if (mSearchBox->GetValue().size() > 0)
 		return;
-	mListMap.push_back(mList->GetItemCount());
 	ListUpdateEv * ev = dynamic_cast<ListUpdateEv*>(&evt);
 	assert(ev != NULL);
 	const File * file = ev->GetFile();
@@ -266,12 +265,10 @@ void PlayerFrame::OnNewItem(wxCommandEvent& evt)
 	wxString plName = ev->GetPlaylistName();
 	if (lib == mLibNames[mActiveLib] && 
 			plName == mPlaylistNames[mActiveLib][mActivePlaylist])
+	{
+		mListMap.push_back(mList->GetItemCount());
 		AddListItem(file);
-}
-
-void PlayerFrame::OnClose(wxCloseEvent & evt)
-{
-	Destroy();
+	}
 }
 
 void PlayerFrame::OnVolButton(wxCommandEvent& ev) 
@@ -390,19 +387,23 @@ void PlayerFrame::DrawName()
 		throw MyException("mCurrItemId is not set", 
 				MyException::NOT_FATAL);
 	const File * file = GetCurrFile();
-	const MusicFile * aFile = dynamic_cast<const MusicFile*>(file);
+	const MediaFile * aFile;
+	//TODO: test for pictures as well
+	if (file->GetType() == "Music" || file->GetType() == "Video")
+		aFile = dynamic_cast<const MediaFile*>(file);
 	wxString str;
 	if (aFile != nullptr)
 	{
 		str = aFile->GetTitle();
 		wxString artist = aFile->GetArtist();
-		if (artist.size() > 0)
-		{
-			mArtistPanel->ChangeText(artist);
-		}
+		mArtistPanel->ChangeText(artist);
+		
 	}	
 	else
+	{
 		str = file->GetName();
+		mArtistPanel->ChangeText("");
+	}
 	mTextPanel->ChangeText(str);
 }
 
@@ -457,6 +458,7 @@ void PlayerFrame::OnLibButton(wxCommandEvent& ev)
 	int id = ev.GetId();	
 	mActiveLib = id - CTRL_LIB_SELECT_BUTTON;
 	mActivePlaylist = 0;
+	mList->DeleteAllItems();
 	mList->DeleteAllColumns();
 	MakeColumns(mLibNames[mActiveLib]);
 	OnSearch(ev);

@@ -55,9 +55,10 @@ private:
 	const File * mPlayedFile;
 	wxTimer * mSliderTimer;
 	wxTimer * mSecondTimer;
+	bool mInitialised;
 public:
     // override base class virtuals
-	PlayerApp() : mMediaCtrl(nullptr), wxApp() {}
+	PlayerApp() : mMediaCtrl(nullptr), wxApp(), mInitialised(false) {}
     // ----------------------------
     // this one is called on application startup and is a good place for the app
     // initialization (doing it here and not in the ctor allows to have an error
@@ -71,6 +72,7 @@ public:
 	int OnExit()
 	{
 		mFManager->StopSearch();
+		StopTimer();
 		delete mFManager;
 		return 0;
 	}
@@ -137,6 +139,8 @@ public:
    	wxFileOffset Tell();
 	void SetVideoMode(bool show);
 	void SetVideoSize(const wxPoint & pos, const wxSize & size);
+	bool IsInitialised() const {return mInitialised;}
+	void StartTimers(int sliderTimerVal = -1); //if -1 previous
 };
 // ----------------------------------------------------------------------------
 // event tables and other macros for wxWidgets
@@ -158,6 +162,7 @@ wxBEGIN_EVENT_TABLE(PlayerFrame, wxFrame)
 	EVT_MEDIA_LOADED(MEDIA_CTRL, PlayerFrame::OnMediaLoaded)
 	EVT_MEDIA_STOP(MEDIA_CTRL, PlayerFrame::OnMediaStop)
 	EVT_MEDIA_FINISHED(MEDIA_CTRL, PlayerFrame::OnMediaFinish)
+	EVT_MEDIA_PLAY(MEDIA_CTRL, PlayerFrame::OnMediaPlay)
 	EVT_BUTTON(CTRL_PLAY, PlayerFrame::OnPlayBt)
 	EVT_LIST_ITEM_ACTIVATED(CTRL_LIST, PlayerFrame::OnListActivated)
 	EVT_LIST_ITEM_CHECKED(CTRL_LIST, PlayerFrame::OnChecked)
@@ -215,9 +220,6 @@ bool PlayerApp::OnInit()
 
 	mSliderTimer = new wxTimer(mFrame, TIMER_SLIDER);
 	mSecondTimer = new wxTimer(mFrame, TIMER_TIME);
-    // and show it (the frames, unlike simple controls, are not shown when
-    // created initially)
-    mFrame->Show(true);
 	mMediaCtrl = new wxMediaCtrl;
 #ifdef __WINDOWS__ //because default doesn't work for some reason
 	if (!mMediaCtrl->Create(mFrame, MEDIA_CTRL, wxEmptyString, 
@@ -230,21 +232,22 @@ bool PlayerApp::OnInit()
 				MyException::FATAL_ERROR);
 #endif //__WINDOWS__	
 	mMediaCtrl->Hide();
-
+    	mFrame->Show(true);
 	mFManager = new FileManager(mFrame);
 	//add libs and start searching
-	wxString extensions[5] = {"mp3", "flac", "aac", "wma"};
-	AddLib("Music", extensions, 5);
+	wxString extensions[4] = {"mp3", "flac", "aac", "wma"};
+	AddLib("Music", extensions, 4);
 	
 	wxString vidExtensions[5] = {"mp4", "avi", "flv", "wmv", "mov"};
 	AddLib("Video", vidExtensions, 5);
 //	//TODO: add more image formats
-	wxString picExtensions[5] = {"bmp", "gif", "jpeg", "png", "tif"};
-	AddLib("Pictures", picExtensions, 5);
+	//wxString picExtensions[5] = {"bmp", "gif", "jpeg", "png", "tif"};
+	//AddLib("Pictures", picExtensions, 5);
 	mFrame->MakeColumns("Music");
 
 	OnSearchCommand();
 
+	mInitialised = true;
 //	set library to which's new files we are notified as they are found
 //	const Playlist * pl = mFManager.GetPlaylist("Music", "all");
 
@@ -395,12 +398,13 @@ void PlayerFrame::OnListActivated(wxListEvent& ev)
 
 void PlayerApp::Pause()
 {
+
 	if (mMediaCtrl->GetState() == wxMEDIASTATE_PLAYING)
 	{
 		mMediaCtrl->Pause();
+		StopTimer();
 		mFrame->ShiftPlayBt(false);
-		mSliderTimer->Stop();
-		mSecondTimer->Stop();
+
 	}
 	else
 		throw MyException("Tried to pause altough is not playing",
@@ -473,7 +477,20 @@ wxFileOffset PlayerApp::Tell()
 
 void PlayerFrame::OnSecondTimer(wxTimerEvent& ev)
 {
-	wxFileOffset off = mApp->Tell();
+	static int fails = 0;
+	wxFileOffset off;
+	try
+	{
+		off = mApp->Tell();
+	}
+	catch (MyException & exc)
+	{
+		fails++;
+		if (fails == 5)
+		{
+			throw exc;
+		}
+	}
 	int seconds = off / 1000;
 	int secondsPl = seconds % 60;
 	int minutesPl = (seconds-secondsPl) / 60;
@@ -507,7 +524,7 @@ void PlayerFrame::OnForward(wxCommandEvent& ev)
 	}
 	else
 	{
-		if (mCurrItemInList < mList->GetItemCount())
+		if (mCurrItemInList < mList->GetItemCount() - 1)
 		{
 			mCurrItemInList++;
 			mCurrItemId = mListMap[mCurrItemInList];
@@ -515,8 +532,6 @@ void PlayerFrame::OnForward(wxCommandEvent& ev)
 			mApp->Seek(1);
 			OnPlay(true);
 		}
-		else
-			ShiftPlayBt(false);
 	}
 }
 
@@ -651,8 +666,34 @@ void PlayerApp::SetVideoSize(const wxPoint & pos, const wxSize & size)
 void PlayerFrame::OnSize(wxSizeEvent& ev)
 {
 	ev.Skip();
+	if (!mApp->IsInitialised())
+		return;
 	wxSize size(ev.GetSize().x, 
 			ev.GetSize().y-mMediaCtrlsPanel->GetSize().y);
 	wxPoint pos(0, mMediaCtrlsPanel->GetSize().y);
 	mApp->SetVideoSize(pos, size);
+}
+
+void PlayerFrame::OnMediaStop(wxMediaEvent& ev)
+{
+	ShiftPlayBt(false);
+	mApp->StopTimer();
+}
+
+void PlayerFrame::OnMediaPlay(wxMediaEvent& ev)
+{
+	ShiftPlayBt(true);
+	mApp->StartTimers();
+}
+
+void PlayerApp::StartTimers(int sliderTimerVal)
+{
+	mSecondTimer->Start(1000);
+	mSliderTimer->Start(sliderTimerVal);
+}
+
+void PlayerFrame::OnClose(wxCloseEvent & evt)
+{
+	mApp->StopTimer();
+	Destroy();
 }

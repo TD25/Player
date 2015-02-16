@@ -37,12 +37,14 @@ class MediaFile : public File
 protected:
 	static MediaInfo mMInfoHandle;
 public:
-	MediaFile() {}
-	MediaFile(const wxString & filename) : File(filename) {}
-	MediaFile(const wxFileName & wxfilename) : File(wxfilename) {}
+	MediaFile();
+	MediaFile(const wxString & filename);
+	MediaFile(const wxFileName & wxfilename);
 	virtual wxString GetLengthStr() const = 0; //length may be stored in
 										//column contents
 	virtual wxFileOffset GetLength() const; //in miliseconds
+	virtual wxString GetTitle() const = 0;
+	virtual wxString GetArtist() const = 0;
 };
 
 template <typename T>	//T - file type
@@ -103,6 +105,10 @@ public:
 									//track number in the title
 	{
 		return mColContents[0];
+	}
+	virtual wxString GetArtist() const
+	{
+		return "";
 	}
 };
 

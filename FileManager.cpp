@@ -106,6 +106,12 @@ wxThread::ExitCode FileManager::SearcherThread::Entry()
 	//it will find folders on windows without permisions to see files in them
 		//so we supress errors
 	wxLog::SetLogLevel(wxLOG_FatalError);
+	//first search C:\Users, because media is likely to be there
+	if (!mDir.Open("C:\\Users\\"))
+		throw MyException("Failed to open C:\\Users\\", 
+			MyException::FATAL_ERROR);
+	r = mDir.Traverse(*this, wxEmptyString, wxDIR_DIRS | wxDIR_FILES |
+		wxDIR_NO_FOLLOW);
 	//enumerate drives in windows
 	TCHAR drives[512];
 	int val = GetLogicalDriveStrings(511, drives);
@@ -156,9 +162,10 @@ wxDirTraverseResult
 			return wxDIR_CONTINUE;
 		//TODO add function - FromPlaylist
 		int ind = mFManager->FromLib(name);
+		wxString type;
 		if (ind > -1)
 		{
-			wxString type = mFManager->mLibs[ind].GetName();
+			type = mFManager->mLibs[ind].GetName();
 			File * file;
 			if (type == "Music")
 			{
@@ -193,9 +200,16 @@ wxDirTraverseResult
 			}
 			else //TODO: create other file types
 				return wxDIR_CONTINUE;
+			//test again, cause creating mediafile can take time
+			if (TestDestroy())
+			{
+				mStopped = true;
+				return wxDIR_STOP;
+			}
 			mFManager->mFiles.push_back(file);
 			mFManager->mLibs[ind].AddFile(mFManager->mFiles.back());
-			wxQueueEvent(mHandlerFrame, new ListUpdateEv(file, "all"));
+			if (mHandlerFrame != nullptr)
+				wxQueueEvent(mHandlerFrame, new ListUpdateEv(file, "all"));
 		}
 		return wxDIR_CONTINUE;
 	}
@@ -212,13 +226,14 @@ wxDirTraverseResult
 	if (!TestDestroy())
 	{
 //#ifndef NDEBUG
-//		wxMessageOutputDebug().Printf(dirname);
+		wxMessageOutputDebug().Printf(dirname);
 //#endif //NDEBUG
 		if (dirname.Matches("*Program Files") || 
 				dirname.Matches("*Program Files (x86)") 
 				|| dirname.Matches("*Windows") || 
 				dirname.Matches("*AppData") || 
-				dirname.Matches("*ProgramData"))
+				dirname.Matches("*ProgramData") || 
+				dirname.Matches("C:\\Users"))
 			return wxDIR_IGNORE;
 		return wxDIR_CONTINUE;
 	}
