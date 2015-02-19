@@ -53,6 +53,10 @@ public:
 		mText = text;
 		Refresh();
 	}
+	wxString GetText() const
+	{
+		return mText;
+	}
 	enum Aligment //text aligment
 	{
 		TOP_LEFT, TOP_RIGHT

@@ -67,10 +67,10 @@ void FileManager::Search(wxString libName, wxString playlistName)
 	}
 }
 
-int FileManager::FromLib(const wxFileName & file)
+int FileManager::FromLib(const wxString & filename)
 {
 	wxCriticalSectionLocker l(mLibsCS);
-	wxString ext = file.GetExt();
+	wxString ext = GetExtension(filename);
 	for (int i = 0; i < mLibs.size(); i++)
 	{
 		if (mLibs[i].IsRightExtension(ext))
@@ -79,6 +79,11 @@ int FileManager::FromLib(const wxFileName & file)
 		}
 	}
 	return -1;
+}
+
+wxString GetExtension(const wxString & path)
+{
+	return path.Mid(path.find_last_of('.')+1);
 }
 
 wxThread::ExitCode FileManager::SearcherThread::Entry()
@@ -160,9 +165,8 @@ wxDirTraverseResult
 {
 	if (!TestDestroy())
 	{
-		wxFileName name(filename);
 		//TODO add function - FromPlaylist
-		int ind = mFManager->FromLib(name);
+		int ind = mFManager->FromLib(filename);
 		wxString type;
 		if (ind > -1)
 		{
@@ -171,9 +175,9 @@ wxDirTraverseResult
 			try
 			{
 				if (type == "Music")
-					file = new MusicFile(name);
+					file = new MusicFile(filename);
 				else if (type == "Video")
-					file = new VideoFile(name);
+					file = new VideoFile(filename);
 				else //TODO: create other file types
 					return wxDIR_CONTINUE;
 				
@@ -218,9 +222,9 @@ wxDirTraverseResult
 {
 	if (!TestDestroy())
 	{
-//#ifndef NDEBUG
+#ifndef NDEBUG
 		wxMessageOutputDebug().Printf(dirname);
-//#endif //NDEBUG
+#endif //NDEBUG
 		if (dirname.Matches("*Program Files") || 
 				dirname.Matches("*Program Files (x86)") 
 				|| dirname.Matches("*Windows") || 

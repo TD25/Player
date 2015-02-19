@@ -226,7 +226,7 @@ public:
 			const wxString & playlistName) const;
 	//looks if extension of file is right
 	//returns lib index
-	int FromLib(const wxFileName & file);
+	int FromLib(const wxString & file);
 	const File * GetFile(const wxString & libName, 
 			const wxString & plName, const int & id) const;
 	//searches for files in playlist and returns indexes
@@ -245,3 +245,5 @@ public:
 	bool IsFound(const wxFileName & filename) const;
 	~FileManager();
 };
+
+wxString GetExtension(const wxString & str);

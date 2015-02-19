@@ -204,7 +204,6 @@ IMPLEMENT_APP(PlayerApp)
 // 'Main program' equivalent: the program execution "starts" here
 bool PlayerApp::OnInit()
 {
-	_CrtSetDbgFlag(_CRTDBG_ALLOC_MEM_DF | _CRTDBG_LEAK_CHECK_DF);
     // call the base class initialization method, currently it only parses a
     // few common command-line options but it could be do more in the future
     if ( !wxApp::OnInit() )
@@ -494,6 +493,7 @@ void PlayerFrame::OnSecondTimer(wxTimerEvent& ev)
 		{
 			throw exc;
 		}
+		return;
 	}
 	int seconds = off / 1000;
 	int secondsPl = seconds % 60;

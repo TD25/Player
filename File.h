@@ -13,24 +13,83 @@
 #endif	//MEDIAINFO_DLL
 using namespace MediaInfoNamespace;
 
-//Curiously recurring template pattern:
-
 class File : public wxFileName
 {
 protected:
-	virtual void CollectInfo() = 0; //this should get all info about
+	virtual void CollectInfo(); //this should get all info about
 		//this file and fill mColContents
 	mutable wxCriticalSection mCS; //protects file data
+	struct FileInfo
+	{
+		//info for list
+		const wxString * mColumns;
+		const int mColCount;
+		const int * mColSizes;
+		wxVector<wxString> mColContents;
+		const wxString mType;
+		FileInfo(const wxString & type, const wxString * columns, const int colCount, 
+			const int * colSizes = nullptr) :
+			mType(type), mColumns(columns), mColCount(colCount), mColSizes(colSizes), 
+			mColContents(colCount) {}
+		FileInfo(const wxString type, const wxString * columns, const int colCount, 
+			const wxVector<wxString> & contents, const int * colSizes = nullptr ) :
+			mType(type), mColumns(columns), mColCount(colCount), mColSizes(colSizes), 
+			mColContents(contents) {}
+	};
+	static FileInfo mInfo; //derived classes should declare their own 
+	virtual FileInfo & GetFileInfo() const = 0 //and implement this function
+	{
+		return mInfo;
+	}
 public:
 	File() : wxFileName() {}
-	File(const wxString & filename) : wxFileName(filename) {}
-	File(const wxFileName & wxfilename) : wxFileName(wxfilename) {}
-	virtual int GetColCount() const = 0;
-	virtual wxString GetColContent(const int & colNo) const = 0;
-	virtual wxVector<wxString> GetColNames() const = 0;
-	virtual wxString GetCol(const int & n) const = 0;
-	virtual int GetColSize(const int & n) const = 0;
-	virtual wxString GetType() const = 0;
+	File(const wxString & filename) : wxFileName(filename) 
+	{
+		CollectInfo();
+	}
+	File(const wxFileName & wxfilename) : wxFileName(wxfilename) 
+	{
+		CollectInfo();
+	}
+	int GetColCount() const
+	{
+		return GetFileInfo().mColCount;
+	}
+	virtual wxString GetColContent(const int & colNo) const
+	{
+		FileInfo & info = GetFileInfo();
+		if (colNo >= info.mColCount)
+			throw MyException("Too big colNo in File::GetColContent()",
+					MyException::FATAL_ERROR);
+		wxCriticalSectionLocker locker(mCS);
+		return info.mColContents[colNo];
+	}
+	virtual wxVector<wxString> GetColNames() const
+	{
+		FileInfo & info = GetFileInfo();
+		wxVector<wxString> v(info.mColumns, info.mColumns + info.mColCount);
+		return v;
+	}
+	virtual wxString GetCol(const int & n) const
+	{
+		FileInfo & info = GetFileInfo();
+		if (n >= info.mColCount)
+			throw MyException("MediaFileT::GetCol(): too big argument passed",
+					MyException::FATAL_ERROR);
+		return info.mColumns[n];
+	}
+	virtual int GetColSize(const int & n) const
+	{
+		FileInfo & i = GetFileInfo();
+		if (n >= i.mColCount)
+			throw MyException("MediaFileT::GetCol(): too big argument passed",
+					MyException::FATAL_ERROR);
+		return i.mColSizes[n];
+	}
+	virtual wxString GetType() const
+	{
+		return GetFileInfo().mType;
+	}
 	virtual ~File() = 0;
 };
 
@@ -39,141 +98,80 @@ class MediaFile : public File
 protected:
 	static MediaInfo mMInfoHandle;
 	mutable wxCriticalSection mMInfoCS;
+	static FileInfo mMedInfo;
+	virtual FileInfo & GetFileInfo() const = 0
+	{
+		return mMedInfo;
+	}
+	virtual void CollectInfo() = 0;
+	void StoreTitleAndTime(); //mMInfoHandle has to have opened file
 public:
 	MediaFile();
 	MediaFile(const wxString & filename);
 	MediaFile(const wxFileName & wxfilename);
-	virtual wxString GetLengthStr() const = 0; //length may be stored in
-										//column contents
-	virtual wxFileOffset GetLength()const; //in miliseconds
-	virtual wxString GetTitle() const = 0;
+	virtual wxString GetLengthStr() const
+	{
+		FileInfo & i = GetFileInfo();
+		wxCriticalSectionLocker locker(mCS);
+		if (i.mColContents[1].size() <= 0)
+			return wxString("0.0");
+		return i.mColContents[1];	
+	}
+	wxFileOffset GetLength()const; //in miliseconds
+	virtual wxString GetTitle() const;
 	virtual wxString GetArtist() const = 0;
 };
 
-template <typename T>	//T - file type
-class MediaFileT : public MediaFile
-{
-protected:
-	//info for list
-	static const wxString * mColumns;
-	static const int mColCount;
-	static const int * mColSizes;
-	wxVector<wxString> mColContents;
-	virtual void CollectInfo()
-	{
-		wxCriticalSectionLocker locker(mCS);
-		mColContents[0] = GetName();
-	}
-public:
-	MediaFileT() : MediaFile(), mColContents(mColCount)
-	{
-	}
-	MediaFileT(const wxString & filename) : MediaFile(filename), 
-		mColContents(mColCount)
-	{
-	}
-	MediaFileT(const wxFileName & wxfilename) : MediaFile(wxfilename),
-		mColContents(mColCount)	{}
-	virtual ~MediaFileT()
-	{
-	}
-	virtual int GetColCount() const { return mColCount; }
-	virtual wxString GetColContent(const int & colNo) const
-	{
-		if (colNo >= mColCount)
-			throw MyException("Too big colNo in File::GetColContent()",
-					MyException::FATAL_ERROR);
-		wxCriticalSectionLocker locker(mCS);
-		return mColContents[colNo];
-	}
-	virtual wxVector<wxString> GetColNames() const
-	{
-		wxVector<wxString> cols(mColumns, mColumns+mColCount);
-		return cols;
-	}
-	virtual wxString GetCol(const int & n) const 
-	{
-		if (n >= mColCount)
-			throw MyException("MediaFileT::GetCol(): too big argument passed",
-					MyException::FATAL_ERROR);
-		return mColumns[n];
-	}
-	virtual int GetColSize(const int & n) const 
-	{
-		if (n >= mColCount)
-			throw MyException("MediaFileT::GetCol(): too big argument passed",
-					MyException::FATAL_ERROR);
-		return mColSizes[n];
-	}
-
-	virtual wxString GetTitle() const //if you don't want 
-									//track number in the title
-	{
-		wxCriticalSectionLocker locker(mCS);
-		return mColContents[0];
-	}
-	virtual wxString GetArtist() const
-	{
-		return "";
-	}
-};
-
-class MusicFile : public MediaFileT<MusicFile>
+class MusicFile : public MediaFile
 {
 protected:
 	virtual void CollectInfo();
+	static FileInfo mMusicInfo;
+	virtual FileInfo & GetFileInfo() const
+	{
+		return mMusicInfo;
+	}
 public:
-	MusicFile() : MediaFileT() {}
-	MusicFile(const wxString & filename) : MediaFileT(filename)
+	MusicFile() : MediaFile() {}
+	MusicFile(const wxString & filename) : MediaFile(filename)
 	{
 		CollectInfo();
 	}
-	MusicFile(const wxFileName & wxfilename) : MediaFileT(wxfilename)
+	MusicFile(const wxFileName & wxfilename) : MediaFile(wxfilename)
 	{
 		CollectInfo();
-	}
-	virtual wxString GetLengthStr() const
-	{
-		if (mColContents[1].size() <= 0)
-			return wxString("0.0");
-		wxCriticalSectionLocker locker(mCS);
-		return mColContents[1];	
 	}
 	wxString GetArtist() const
 	{
+		FileInfo & i = GetFileInfo();
 		wxCriticalSectionLocker locker(mCS);
-		return mColContents[2];
-	}
-	virtual wxString GetType() const
-	{
-		return "Music";
+		return i.mColContents[2];
 	}
 	virtual ~MusicFile() {}
 };
 
-class VideoFile : public MediaFileT<VideoFile>
+class VideoFile : public MediaFile
 {
 protected:
 	virtual void CollectInfo();
+	static FileInfo mVidInfo;
+	virtual FileInfo & GetFileInfo() const
+	{
+		return mVidInfo;
+	}
+
 public:
 	VideoFile() {}
-	VideoFile(const wxString & filename) : MediaFileT(filename) 
+	VideoFile(const wxString & filename) : MediaFile(filename) 
 	{
 		CollectInfo();
 	}
-	VideoFile(const wxFileName & wxfilename) : MediaFileT(wxfilename) 
+	VideoFile(const wxFileName & wxfilename) : MediaFile(wxfilename) 
 	{
 		CollectInfo();
 	}
-	virtual wxString GetLengthStr() const
+	wxString GetArtist() const
 	{
-		if (mColContents[1].size() <= 0)
-			return wxString("0.0");
-		wxCriticalSectionLocker locker(mCS);
-		return mColContents[1];	
-	}
-	virtual wxString GetType() const
-	{
-		return "Video";
+		return wxString("");
 	}
 };
