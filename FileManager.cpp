@@ -7,16 +7,12 @@
 	#include <string>
 #endif
 
-ListUpdateEv::ListUpdateEv(const File * file, const wxString & plName) : 
-	wxCommandEvent(EVT_SEARCHER_UPDATE), mpFile(file), 
-	mPlaylistName(plName)	
-	{}
-
 void FileManager::AddLib(MediaLibrary lib)
 {
 	if (FindLib(lib.GetName()) != -1)
 		throw MyException("There already exists library with this name",
 				MyException::NOT_FATAL);
+	wxCriticalSectionLocker l(mLibsCS);
 	mLibs.push_back(lib);
 }
 
@@ -25,6 +21,7 @@ void FileManager::AddLib(const wxString & name)
 	if (FindLib(name) != -1)
 		throw MyException("There already exist library with this name",
 				MyException::NOT_FATAL);
+	wxCriticalSectionLocker l(mLibsCS);
 	mLibs.push_back(name);
 }
 
@@ -38,6 +35,7 @@ void FileManager::AddLibs(MediaLibrary libs[], int n)
 
 int FileManager::FindLib(const wxString & name) const
 {
+	wxCriticalSectionLocker l(mLibsCS);
 	for (int i = 0; i < mLibs.size(); i++)
 	{
 		if (name == mLibs[i].GetName())
@@ -49,8 +47,9 @@ int FileManager::FindLib(const wxString & name) const
 const Playlist * FileManager::GetPlaylist(const wxString & libName, 
 		const wxString & playlistName) const
 {
-	int ind = FindLib(libName);
+	int ind = FindLib(libName); //critical section inside
 	assert(ind > -1);
+	wxCriticalSectionLocker l(mLibsCS);
 	return mLibs[ind].GetPlaylist(playlistName);
 }
 
@@ -70,6 +69,7 @@ void FileManager::Search(wxString libName, wxString playlistName)
 
 int FileManager::FromLib(const wxFileName & file)
 {
+	wxCriticalSectionLocker l(mLibsCS);
 	wxString ext = file.GetExt();
 	for (int i = 0; i < mLibs.size(); i++)
 	{
@@ -92,6 +92,8 @@ wxThread::ExitCode FileManager::SearcherThread::Entry()
 		throw MyException("wxDir::Traverse failed", 
 			MyException::FATAL_ERROR);
 #ifdef NDEBUG
+	if (mStopped)
+		return (wxThread::ExitCode)0;
 	mDir.Open("/media/");
 	r = mDir.Traverse(*this, wxEmptyString, wxDIR_DIRS | wxDIR_FILES |
 			wxDIR_NO_FOLLOW);
@@ -105,7 +107,7 @@ wxThread::ExitCode FileManager::SearcherThread::Entry()
 #ifdef __WINDOWS__
 	//it will find folders on windows without permisions to see files in them
 		//so we supress errors
-	wxLog::SetLogLevel(wxLOG_FatalError);
+	wxLogNull logNull;
 	//first search C:\Users, because media is likely to be there
 	if (!mDir.Open("C:\\Users\\"))
 		throw MyException("Failed to open C:\\Users\\", 
@@ -131,20 +133,22 @@ wxThread::ExitCode FileManager::SearcherThread::Entry()
 				len = _tcslen(&drives[n]);
 				continue;
 			}
-			r = mDir.Traverse(*this, wxEmptyString, wxDIR_DIRS | wxDIR_FILES |	wxDIR_NO_FOLLOW);
+
+		if (mStopped)
+			return (wxThread::ExitCode)0;
+		r = mDir.Traverse(*this, wxEmptyString, wxDIR_DIRS | wxDIR_FILES |	wxDIR_NO_FOLLOW);
 			n += len+1;
 			len = 0;
 			len = _tcslen(&drives[n]);
 		}
 	}
-	wxLog::SetLogLevel(wxLOG_Max) ;
 
 #endif //__WINDOWS__
 
 	if (!mStopped)
 	{
 		wxQueueEvent(mHandlerFrame, 
-			new wxThreadEvent(EVT_SEARCHER_COMPLETE));
+			new wxThreadEvent(wxEVT_THREAD, EVT_SEARCHER_COMPLETE));
 	}
 	
 
@@ -156,10 +160,7 @@ wxDirTraverseResult
 {
 	if (!TestDestroy())
 	{
-		wxCriticalSectionLocker enter(mFManagerCS);
 		wxFileName name(filename);
-		if (mFManager->IsFound(name))
-			return wxDIR_CONTINUE;
 		//TODO add function - FromPlaylist
 		int ind = mFManager->FromLib(name);
 		wxString type;
@@ -167,49 +168,41 @@ wxDirTraverseResult
 		{
 			type = mFManager->mLibs[ind].GetName();
 			File * file;
-			if (type == "Music")
+			try
 			{
-				try
-				{
+				if (type == "Music")
 					file = new MusicFile(name);
-				}
-				catch (MyException & exc)
-				{
-					//if failed to initialize object don't put it in the list
-					if (exc.type == MyException::NOT_FATAL)
-						return wxDIR_CONTINUE; 
-					else
-						throw;
-				}
-			}
-			else if (type == "Video")
-			{
-				try
-				{
+				else if (type == "Video")
 					file = new VideoFile(name);
-				}
-				catch (MyException & exc)
-				{
-					//if failed to initialize object don't put it in the list
-					if (exc.type == MyException::NOT_FATAL)
-						return wxDIR_CONTINUE; 
-					else
-						throw;
-				}
-
+				else //TODO: create other file types
+					return wxDIR_CONTINUE;
+				
 			}
-			else //TODO: create other file types
-				return wxDIR_CONTINUE;
+			catch (MyException & exc)
+			{
+				//if failed to initialize object don't put it in the list
+				if (exc.type == MyException::NOT_FATAL)
+					return wxDIR_CONTINUE; 
+				else
+					throw;
+			}
+
 			//test again, cause creating mediafile can take time
 			if (TestDestroy())
 			{
 				mStopped = true;
+				wxDELETE(file);
 				return wxDIR_STOP;
 			}
+			wxCriticalSectionLocker l(mFManager->mFilesCS);
 			mFManager->mFiles.push_back(file);
 			mFManager->mLibs[ind].AddFile(mFManager->mFiles.back());
+			wxThreadEvent * ev = new wxThreadEvent(wxEVT_THREAD, EVT_SEARCHER_UPDATE);
+			ev->SetString("all");
+			ev->SetPayload<const File*>(file);
 			if (mHandlerFrame != nullptr)
-				wxQueueEvent(mHandlerFrame, new ListUpdateEv(file, "all"));
+				wxQueueEvent(mHandlerFrame, ev);
+			file = nullptr;
 		}
 		return wxDIR_CONTINUE;
 	}
@@ -290,8 +283,11 @@ const File * FileManager::GetFile(const wxString & libName,
 
 FileManager::~FileManager()
 {
+	if (IsSearching())
+		StopSearch();
+	wxCriticalSectionLocker l(mFilesCS);
 	for (int i = 0; i < mFiles.size(); i++)
-		delete mFiles[i];
+		wxDELETE(mFiles[i]);
 }
 
 wxVector<long> FileManager::FindFilesInPlaylist(const wxString & libName,
@@ -304,6 +300,7 @@ wxVector<long> FileManager::FindFilesInPlaylist(const wxString & libName,
 wxVector<long> Playlist::FindFiles(const wxString & mask) const
 {
 	wxVector<long> matchingInd;
+	wxCriticalSectionLocker l(mFilesCS);
 	for (int i = 0; i < mFiles.size(); i++)
 	{
 		wxString fName = mFiles[i]->GetName();
@@ -316,6 +313,7 @@ wxVector<long> Playlist::FindFiles(const wxString & mask) const
 
 bool FileManager::IsFound(const wxFileName & filename) const
 {
+	wxCriticalSectionLocker l(mFilesCS);
 	for (int i = 0; i < mFiles.size(); i++)
 	{
 		if (mFiles[i]->GetFullPath() == filename.GetFullPath())

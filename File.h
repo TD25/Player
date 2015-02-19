@@ -3,6 +3,7 @@
 #include "Common.h"
 #include "wx/vector.h"
 #include "wx/string.h"
+#include "wx/thread.h"
 #ifdef MEDIAINFO_DLL
 	#include <MediaInfoDLL/MediaInfoDLL.h>
 	#define MediaInfoNamespace MediaInfoDLL;
@@ -19,6 +20,7 @@ class File : public wxFileName
 protected:
 	virtual void CollectInfo() = 0; //this should get all info about
 		//this file and fill mColContents
+	mutable wxCriticalSection mCS; //protects file data
 public:
 	File() : wxFileName() {}
 	File(const wxString & filename) : wxFileName(filename) {}
@@ -36,13 +38,14 @@ class MediaFile : public File
 {
 protected:
 	static MediaInfo mMInfoHandle;
+	mutable wxCriticalSection mMInfoCS;
 public:
 	MediaFile();
 	MediaFile(const wxString & filename);
 	MediaFile(const wxFileName & wxfilename);
 	virtual wxString GetLengthStr() const = 0; //length may be stored in
 										//column contents
-	virtual wxFileOffset GetLength() const; //in miliseconds
+	virtual wxFileOffset GetLength()const; //in miliseconds
 	virtual wxString GetTitle() const = 0;
 	virtual wxString GetArtist() const = 0;
 };
@@ -58,6 +61,7 @@ protected:
 	wxVector<wxString> mColContents;
 	virtual void CollectInfo()
 	{
+		wxCriticalSectionLocker locker(mCS);
 		mColContents[0] = GetName();
 	}
 public:
@@ -74,11 +78,12 @@ public:
 	{
 	}
 	virtual int GetColCount() const { return mColCount; }
-	virtual wxString GetColContent(const int & colNo) const 
+	virtual wxString GetColContent(const int & colNo) const
 	{
 		if (colNo >= mColCount)
 			throw MyException("Too big colNo in File::GetColContent()",
 					MyException::FATAL_ERROR);
+		wxCriticalSectionLocker locker(mCS);
 		return mColContents[colNo];
 	}
 	virtual wxVector<wxString> GetColNames() const
@@ -104,6 +109,7 @@ public:
 	virtual wxString GetTitle() const //if you don't want 
 									//track number in the title
 	{
+		wxCriticalSectionLocker locker(mCS);
 		return mColContents[0];
 	}
 	virtual wxString GetArtist() const
@@ -130,10 +136,12 @@ public:
 	{
 		if (mColContents[1].size() <= 0)
 			return wxString("0.0");
+		wxCriticalSectionLocker locker(mCS);
 		return mColContents[1];	
 	}
 	wxString GetArtist() const
 	{
+		wxCriticalSectionLocker locker(mCS);
 		return mColContents[2];
 	}
 	virtual wxString GetType() const
@@ -161,6 +169,7 @@ public:
 	{
 		if (mColContents[1].size() <= 0)
 			return wxString("0.0");
+		wxCriticalSectionLocker locker(mCS);
 		return mColContents[1];	
 	}
 	virtual wxString GetType() const

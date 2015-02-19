@@ -15,6 +15,7 @@ class Playlist
 {
 private:
 	wxString mName;
+	mutable wxCriticalSection mFilesCS;
 	wxVector<File*> mFiles;
 	File * Find(wxString path) const
 	{
@@ -27,6 +28,7 @@ private:
 	}
 	File * Find(File * file) const 
 	{
+		wxCriticalSectionLocker l(mFilesCS);
 		for (int i = 0; i < mFiles.size(); i++)
 		{
 			if (mFiles[i] == file)
@@ -37,9 +39,12 @@ private:
 public:
 	Playlist(wxString name) : mName(name)
 	{}
+	Playlist(const Playlist & p) : mName(p.mName), mFiles(p.mFiles)
+	{}
 	void Add(File * file)
 	{
 		assert(file != NULL); 
+		wxCriticalSectionLocker l(mFilesCS);
 		if (Find(file) != NULL)
 			return;		//maybe throw exception?
 		if (!file->Exists())
@@ -50,15 +55,18 @@ public:
 	}
 	const wxVector<File*> * GetFiles() const 
 	{
+		wxCriticalSectionLocker l(mFilesCS);
 		return &mFiles;
 	}
 	const File* GetFile(const int & id) const 
 	{
+		wxCriticalSectionLocker l(mFilesCS);
 		assert(id < mFiles.size());
 		return mFiles[id];
 	}
 	const File* GetFile(wxString name) const
 	{
+		//critical section locked in Find()
 		return Find(name);
 	}
 	wxString GetName() const 
@@ -73,9 +81,11 @@ class MediaLibrary
 private:
 	wxVector<wxString> mExtensions;
 	wxString mName;
+	mutable wxCriticalSection mPlaylistsCS;
 	wxVector<Playlist> mPlaylists;
 	int FindPlaylist(wxString & name) const
 	{
+		wxCriticalSectionLocker l(mPlaylistsCS);
 		for (int i = 0; i < mPlaylists.size(); i++)
 		{
 			if (mPlaylists[i].GetName() == name)
@@ -91,9 +101,11 @@ public:
 	MediaLibrary(wxString name, wxString extensions[], int n) : 
 		mName(name)
 	{
-		mExtensions.assign(&extensions[0], &extensions[n-1]);
+		mExtensions.assign(&extensions[0], &extensions[n]);
 		AddPlaylist("all");
 	}
+	MediaLibrary(const MediaLibrary& m) : mExtensions(m.mExtensions), mName(m.mName),
+		mPlaylists(m.mPlaylists) {}
 	void AddExtension(wxString extension)
 	{
 		mExtensions.push_back(extension);
@@ -109,14 +121,17 @@ public:
 			throw MyException(
 					"There already is a playlist with this name", 
 					MyException::NOT_FATAL);
+		wxCriticalSectionLocker l(mPlaylistsCS);
 		mPlaylists.push_back(name);
 	}
 	void AddFile(File * file)
 	{
+		wxCriticalSectionLocker l(mPlaylistsCS);
 		mPlaylists[0].Add(file);
 	}
 	void AddFileToPlaylist(File * file, wxString playlistName)
 	{
+		wxCriticalSectionLocker l(mPlaylistsCS);
 		mPlaylists[0].Add(file);
 		int ind = FindPlaylist(playlistName);
 		assert(ind > -1);
@@ -124,12 +139,14 @@ public:
 	}
 	const Playlist * GetPlaylist(wxString name)	const
 	{
+		//critical section inside
 		int ind = FindPlaylist(name);
 		assert(ind > -1);
 		return &mPlaylists[ind];
 	}
 	const Playlist * GetPlaylist(int ind) const
 	{
+		wxCriticalSectionLocker l(mPlaylistsCS);
 		return &mPlaylists[ind];
 	}
 
@@ -150,15 +167,11 @@ public:
 
 };
 
-
-
-// declare a new type of event, to be used by our SearcherThread class:
-wxDECLARE_EVENT(EVT_SEARCHER_COMPLETE, wxThreadEvent);
-wxDECLARE_EVENT(EVT_SEARCHER_UPDATE, ListUpdateEv);
-
 class FileManager 
 {
 private:
+	mutable wxCriticalSection mFilesCS;
+	mutable wxCriticalSection mLibsCS;
 	wxVector<File*> mFiles;	//all files found
 	wxVector<MediaLibrary> mLibs;
 	int FindLib(const wxString & name) const;
@@ -168,8 +181,6 @@ private:
 	{
 	private:
 		FileManager * mFManager;
-		//protects mFManager	
-		wxCriticalSection mFManagerCS;
 		wxDir mDir;
 		PlayerFrame * mHandlerFrame;		
 		virtual ExitCode Entry();
@@ -187,6 +198,13 @@ private:
 	friend SearcherThread;
 	//on these new found files events are sent
 	wxString mCurrLib, mCurrPlaylist;
+protected:
+	void AddFile(File * file)
+	{
+		assert(file != nullptr);
+		wxCriticalSectionLocker l(mFilesCS);
+		mFiles.push_back(file);
+	}
 public:
 	FileManager(PlayerFrame * frame = NULL) :
 		mHandlerFrame(frame), mCurrLib(""), mCurrPlaylist(""), 

@@ -253,16 +253,15 @@ void PlayerFrame::AddListItem(const File * file)
 	}
 }
 
-void PlayerFrame::OnNewItem(wxCommandEvent& evt)
+void PlayerFrame::OnNewItem(wxThreadEvent& evt)
 {
 	//TODO also check which playlist
 	if (mSearchBox->GetValue().size() > 0)
 		return;
-	ListUpdateEv * ev = dynamic_cast<ListUpdateEv*>(&evt);
-	assert(ev != NULL);
-	const File * file = ev->GetFile();
+	const File * file = evt.GetPayload<const File*>();
+	assert(file != nullptr);
 	wxString lib = file->GetType();
-	wxString plName = ev->GetPlaylistName();
+	wxString plName = evt.GetString();
 	if (lib == mLibNames[mActiveLib] && 
 			plName == mPlaylistNames[mActiveLib][mActivePlaylist])
 	{

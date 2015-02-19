@@ -36,27 +36,9 @@ enum
 	MEDIA_CTRL,
 	TIMER_SLIDER,
 	TIMER_TIME,
+	EVT_SEARCHER_UPDATE,
+	EVT_SEARCHER_COMPLETE,
 	CTRL_LIB_SELECT_BUTTON //KEEP THIS LAST
-};
-
-class ListUpdateEv : public wxCommandEvent
-{
-private:
-	const File * mpFile;
-	wxString mPlaylistName;
-public:
-	ListUpdateEv(const File * file, const wxString & playlistName);
-	const File * GetFile() {return mpFile;}
-	 // implement the base class pure virtual
-	virtual wxEvent *Clone() const { return new ListUpdateEv(*this); }
-	wxString GetType() const
-	{
-		return mpFile->GetType();
-	}
-	wxString GetPlaylistName() const
-	{
-		return mPlaylistName;
-	}
 };
 
 class PlayerApp;
@@ -72,8 +54,8 @@ public:
     void OnAbout(wxCommandEvent& event);
 	void AddLib(wxString label, wxString columns[] = NULL, int n = 0);
 	void AddListItem(const File * file);
-	void OnNewItem(wxCommandEvent& event);
-	void OnSearchCompletion(wxCommandEvent& event) 
+	void OnNewItem(wxThreadEvent& event);
+	void OnSearchCompletion(wxThreadEvent& event) 
 	{
 		wxLogStatus(this, "Search complete");
 		mFileMenu->Enable(SEARCH, true);

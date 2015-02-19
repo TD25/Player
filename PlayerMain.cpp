@@ -13,6 +13,9 @@
 #include "checkedlistctrl.h"
 #include "wx/dcclient.h"
 #include "File.h"
+#ifdef _DEBUG
+	#include <vld.h>
+#endif //_DEBUG
 
 #ifdef __BORLANDC__
     #pragma hdrstop
@@ -71,9 +74,9 @@ public:
 			wxString columns[] = NULL, int n = 0);
 	int OnExit()
 	{
-		mFManager->StopSearch();
-		StopTimer();
-		delete mFManager;
+		wxDELETE(mFManager);
+		wxDELETE(mSecondTimer);
+		wxDELETE(mSliderTimer);
 		return 0;
 	}
 	void Play(const wxString & libName, const wxString & plName, 
@@ -141,6 +144,11 @@ public:
 	void SetVideoSize(const wxPoint & pos, const wxSize & size);
 	bool IsInitialised() const {return mInitialised;}
 	void StartTimers(int sliderTimerVal = -1); //if -1 previous
+	void StopSearch()
+	{
+		if (mFManager != nullptr && mFManager->IsSearching())
+			mFManager->StopSearch();
+	}
 };
 // ----------------------------------------------------------------------------
 // event tables and other macros for wxWidgets
@@ -155,9 +163,8 @@ wxBEGIN_EVENT_TABLE(PlayerFrame, wxFrame)
     EVT_MENU(ABOUT, PlayerFrame::OnAbout)
 	EVT_MENU(SEARCH, PlayerFrame::OnSearchDrive)
 	EVT_MENU(STOP_SEARCH, PlayerFrame::OnStopSearch)
-   	EVT_COMMAND(wxID_ANY, EVT_SEARCHER_UPDATE, PlayerFrame::OnNewItem)
-	EVT_COMMAND(wxID_ANY, EVT_SEARCHER_COMPLETE, 
-			PlayerFrame::OnSearchCompletion)
+   	EVT_THREAD(EVT_SEARCHER_UPDATE, PlayerFrame::OnNewItem)
+	EVT_THREAD(EVT_SEARCHER_COMPLETE, PlayerFrame::OnSearchCompletion)
 	EVT_BUTTON(CTRL_VOL_BUTTON, PlayerFrame::OnVolButton)
 	EVT_MEDIA_LOADED(MEDIA_CTRL, PlayerFrame::OnMediaLoaded)
 	EVT_MEDIA_STOP(MEDIA_CTRL, PlayerFrame::OnMediaStop)
@@ -179,10 +186,6 @@ wxBEGIN_EVENT_TABLE(PlayerFrame, wxFrame)
 	EVT_SIZE(PlayerFrame::OnSize)
 wxEND_EVENT_TABLE()
 
-//define events sent by worker threads
-wxDEFINE_EVENT(EVT_SEARCHER_COMPLETE, wxThreadEvent);
-wxDEFINE_EVENT(EVT_SEARCHER_UPDATE, ListUpdateEv);
-
 // Create a new application object: this macro will allow wxWidgets to create
 // the application object during program execution (it's better than using a
 // static object for many reasons) and also implements the accessor function
@@ -201,6 +204,7 @@ IMPLEMENT_APP(PlayerApp)
 // 'Main program' equivalent: the program execution "starts" here
 bool PlayerApp::OnInit()
 {
+	_CrtSetDbgFlag(_CRTDBG_ALLOC_MEM_DF | _CRTDBG_LEAK_CHECK_DF);
     // call the base class initialization method, currently it only parses a
     // few common command-line options but it could be do more in the future
     if ( !wxApp::OnInit() )
@@ -238,8 +242,8 @@ bool PlayerApp::OnInit()
 	wxString extensions[4] = {"mp3", "flac", "aac", "wma"};
 	AddLib("Music", extensions, 4);
 	
-	wxString vidExtensions[5] = {"mp4", "avi", "flv", "wmv", "mov"};
-	AddLib("Video", vidExtensions, 5);
+	wxString vidExtensions[6] = {"mp4", "avi", "flv", "wmv", "mov", "mkv"};
+	AddLib("Video", vidExtensions, 6);
 //	//TODO: add more image formats
 	//wxString picExtensions[5] = {"bmp", "gif", "jpeg", "png", "tif"};
 	//AddLib("Pictures", picExtensions, 5);
@@ -625,10 +629,10 @@ void PlayerApp::OnStopSearchCommand()
 {
 	if (!mFManager->IsSearching())
 		throw MyException("Wasn't searching", MyException::NOT_FATAL);
+	wxLogStatus(mFrame, "Searching stopped");
 	mFManager->StopSearch();
 	mFrame->mFileMenu->Enable(SEARCH, true);
 	mFrame->mFileMenu->Enable(STOP_SEARCH, false);
-	wxLogStatus(mFrame, "Searching stopped");
 }
 
 void PlayerFrame::OnStopSearch(wxCommandEvent& ev)
@@ -689,11 +693,13 @@ void PlayerFrame::OnMediaPlay(wxMediaEvent& ev)
 void PlayerApp::StartTimers(int sliderTimerVal)
 {
 	mSecondTimer->Start(1000);
-	mSliderTimer->Start(sliderTimerVal);
+	int interval = mSliderTimer->GetInterval();
+	mSliderTimer->Start(interval);
 }
 
 void PlayerFrame::OnClose(wxCloseEvent & evt)
 {
+	mApp->StopSearch();
 	mApp->StopTimer();
 	Destroy();
 }

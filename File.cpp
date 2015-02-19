@@ -43,6 +43,8 @@ MediaFile::MediaFile(const wxString & filename) : File(filename)
 void MusicFile::CollectInfo()
 {
 	wxString path = GetFullPath();
+	wxCriticalSectionLocker locker(mMInfoCS);
+	wxCriticalSectionLocker dLocker(mCS);
 	bool r = mMInfoHandle.Open(path.ToStdWstring());
 	if (!r)
 		throw MyException("MusicFile::CollectInfo(): failed to initialise tagfile", MyException::NOT_FATAL);
@@ -72,7 +74,8 @@ File::~File()
 
 wxFileOffset MediaFile::GetLength() const
 {
-	bool r = mMInfoHandle.Open(GetFullPath().ToStdWstring());		
+	MediaInfo mediaInfo;
+	bool r = mediaInfo.Open(GetFullPath().ToStdWstring());		
 	if (!r)
 		throw MyException("MediaFile::GetLength(): MediaInfo failed\
 				to open file", MyException::NOT_FATAL);
@@ -80,17 +83,16 @@ wxFileOffset MediaFile::GetLength() const
 			0, L"Duration").c_str();
 	long l;
 	str.ToLong(&l, 10);
-	mMInfoHandle.Close();
 	return l;
 }
 
 void VideoFile::CollectInfo()
 {
+
+	wxCriticalSectionLocker locker(mMInfoCS);
+	wxCriticalSectionLocker dLocker(mCS);
 	wxString path = GetFullPath();
-	
-	wxMessageOutputDebug().Printf("opening " + path);
 	bool r = mMInfoHandle.Open(path.ToStdWstring());
-	wxMessageOutputDebug().Printf("opened");
 	if (!r)
 		throw MyException("MusicFile::CollectInfo(): failed to initialise tagfile", MyException::NOT_FATAL);
 
