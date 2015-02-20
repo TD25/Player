@@ -88,76 +88,115 @@ wxString GetExtension(const wxString & path)
 
 wxThread::ExitCode FileManager::SearcherThread::Entry()
 {
-
+	mState = WORKING;
+	StartAnalyserThread();
 	int r;
+	try
+	{
 #ifdef __LINUX__
-	mDir.Open("/home/");
-	r = mDir.Traverse(*this, wxEmptyString, wxDIR_DIRS | wxDIR_FILES | wxDIR_NO_FOLLOW);
-	if (r == -1)
-		throw MyException("wxDir::Traverse failed", 
-			MyException::FATAL_ERROR);
+		mDir.Open("/home/");
+		r = mDir.Traverse(*this, wxEmptyString, wxDIR_DIRS | wxDIR_FILES | wxDIR_NO_FOLLOW);
+		if (r == -1)
+			throw MyException("wxDir::Traverse failed", 
+				MyException::FATAL_ERROR);
 #ifdef NDEBUG
-	if (mStopped)
-		return (wxThread::ExitCode)0;
-	mDir.Open("/media/");
-	r = mDir.Traverse(*this, wxEmptyString, wxDIR_DIRS | wxDIR_FILES |
-			wxDIR_NO_FOLLOW);
-	if (r == -1)
-		throw MyException("wxDir::Traverse failed", 
-			MyException::FATAL_ERROR);
+		if (mStopped)
+		{
+			StopAnalyserThread();
+			return (wxThread::ExitCode)0;
+		}
+		mDir.Open("/media/");
+		r = mDir.Traverse(*this, wxEmptyString, wxDIR_DIRS | wxDIR_FILES |
+				wxDIR_NO_FOLLOW);
+		if (r == -1)
+			throw MyException("wxDir::Traverse failed", 
+				MyException::FATAL_ERROR);
+		if (mStopped)
+		{
+			StopAnalyserThread();
+			return (wxThread::ExitCode)0;
+		}
 #endif//NDEBUG
 
 #endif //__LINUX__
 
 #ifdef __WINDOWS__
-	//it will find folders on windows without permisions to see files in them
+		//it will find folders on windows without permisions to see files in them
 		//so we supress errors
-	wxLogNull logNull;
-	//first search C:\Users, because media is likely to be there
-	if (!mDir.Open("C:\\Users\\"))
-		throw MyException("Failed to open C:\\Users\\", 
+		wxLogNull logNull;
+		//first search C:\Users, because media is likely to be there
+		if (!mDir.Open("C:\\Users\\"))
+			throw MyException("Failed to open C:\\Users\\",
 			MyException::FATAL_ERROR);
-	r = mDir.Traverse(*this, wxEmptyString, wxDIR_DIRS | wxDIR_FILES |
-		wxDIR_NO_FOLLOW);
-	//enumerate drives in windows
-	TCHAR drives[512];
-	int val = GetLogicalDriveStrings(511, drives);
-	if (val == 0)
-		throw MyException("GetLogicalDriveStrings() failed",
-			MyException::NOT_FATAL);
-	else
-	{
-		int len = _tcslen(&drives[0]);
-		int n = 0;
-		while (len > 0)
-		{
-		//if can't open don't try (may be empty disk drive or something)
-			if (!mDir.Open(&drives[n]))
-			{
-				n += len+1;
-				len = _tcslen(&drives[n]);
-				continue;
-			}
+		r = mDir.Traverse(*this, wxEmptyString, wxDIR_DIRS | wxDIR_FILES |
+			wxDIR_NO_FOLLOW);
+		if (r == -1)
+			throw MyException("wxDir::Traverse failed", 
+				MyException::FATAL_ERROR);
 
 		if (mStopped)
+		{
+			StopAnalyserThread();
 			return (wxThread::ExitCode)0;
-		r = mDir.Traverse(*this, wxEmptyString, wxDIR_DIRS | wxDIR_FILES |	wxDIR_NO_FOLLOW);
-			n += len+1;
-			len = 0;
-			len = _tcslen(&drives[n]);
 		}
-	}
+		//enumerate drives in windows
+		TCHAR drives[512];
+		int val = GetLogicalDriveStrings(511, drives);
+		if (val == 0)
+			throw MyException("GetLogicalDriveStrings() failed",
+				MyException::NOT_FATAL);
+		else
+		{
+			int len = _tcslen(&drives[0]);
+			int n = 0;
+			while (len > 0)
+			{
+				//if can't open don't try (may be empty disk drive or something)
+				if (!mDir.Open(&drives[n]))
+				{
+					n += len + 1;
+					len = _tcslen(&drives[n]);
+					continue;
+				}
+
+				if (mStopped)
+				{
+					StopAnalyserThread();
+					return (wxThread::ExitCode)0;
+				}
+				r = mDir.Traverse(*this, wxEmptyString, wxDIR_DIRS | wxDIR_FILES
+					| wxDIR_NO_FOLLOW);
+				if (r == -1)
+					throw MyException("wxDir::Traverse failed", 
+						MyException::FATAL_ERROR);
+
+				n += len + 1;
+				len = 0;
+				len = _tcslen(&drives[n]);
+			}
+		}
 
 #endif //__WINDOWS__
 
+	}
+	catch (const MyException & exc)
+	{
+		StopAnalyserThread();
+		throw exc;
+	}
 	if (!mStopped)
 	{
-		wxQueueEvent(mHandlerFrame, 
+		wxQueueEvent(mHandlerFrame,
+			new wxThreadEvent(wxEVT_THREAD, EVT_SEARCHER_UPDATING));
+	}
+	SignalAndWait();
+	if (!mStopped)
+	{
+		wxQueueEvent(mHandlerFrame,
 			new wxThreadEvent(wxEVT_THREAD, EVT_SEARCHER_COMPLETE));
 	}
-	
 
-	 return (wxThread::ExitCode)0; // success
+	return (wxThread::ExitCode)0; // success
 }
 
 wxDirTraverseResult 
@@ -171,42 +210,8 @@ wxDirTraverseResult
 		if (ind > -1)
 		{
 			type = mFManager->mLibs[ind].GetName();
-			File * file;
-			try
-			{
-				if (type == "Music")
-					file = new MusicFile(filename);
-				else if (type == "Video")
-					file = new VideoFile(filename);
-				else //TODO: create other file types
-					return wxDIR_CONTINUE;
-				
-			}
-			catch (MyException & exc)
-			{
-				//if failed to initialize object don't put it in the list
-				if (exc.type == MyException::NOT_FATAL)
-					return wxDIR_CONTINUE; 
-				else
-					throw;
-			}
-
-			//test again, cause creating mediafile can take time
-			if (TestDestroy())
-			{
-				mStopped = true;
-				wxDELETE(file);
-				return wxDIR_STOP;
-			}
-			wxCriticalSectionLocker l(mFManager->mFilesCS);
-			mFManager->mFiles.push_back(file);
-			mFManager->mLibs[ind].AddFile(mFManager->mFiles.back());
-			wxThreadEvent * ev = new wxThreadEvent(wxEVT_THREAD, EVT_SEARCHER_UPDATE);
-			ev->SetString("all");
-			ev->SetPayload<const File*>(file);
-			if (mHandlerFrame != nullptr)
-				wxQueueEvent(mHandlerFrame, ev);
-			file = nullptr;
+			FileEvent ev(type, filename, ind);
+			mQueue.Post(ev);
 		}
 		return wxDIR_CONTINUE;
 	}
@@ -235,7 +240,10 @@ wxDirTraverseResult
 		return wxDIR_CONTINUE;
 	}
 	else
+	{
+		mStopped = true;
 		return wxDIR_STOP;
+	}
 }
 
 FileManager::SearcherThread::~SearcherThread()
@@ -270,11 +278,11 @@ void FileManager::StopSearch()
 }
 
 FileManager::SearcherThread::SearcherThread(
-		FileManager * fMan, PlayerFrame *handler)
-		: wxThread(wxTHREAD_DETACHED), wxDirTraverser(), mSearchStage(0),
-		mFManager(fMan), mStopped(false)
+	FileManager * fMan, PlayerFrame *handler)
+	: wxThread(wxTHREAD_DETACHED), wxDirTraverser(), mHandlerFrame(handler),
+	mFManager(fMan), mStopped(false), mThread(&mQueue, mFManager, &mState,
+		&mStateCS, mHandlerFrame)
 { 
-	mHandlerFrame = handler;
 }
 
 const File * FileManager::GetFile(const wxString & libName, 
@@ -324,4 +332,100 @@ bool FileManager::IsFound(const wxFileName & filename) const
 			return true;
 	}
 	return false;
+}
+
+void FileManager::SearcherThread::StartAnalyserThread()
+{
+	if ( mThread.Run() != wxTHREAD_NO_ERROR )
+	{
+		throw MyException("Failed to run searcher thread!", 
+				MyException::FATAL_ERROR);
+	}
+}
+
+void FileManager::SearcherThread::StopAnalyserThread()
+{
+	assert(mThread.IsAlive());
+	{
+		wxCriticalSectionLocker enter(mStateCS);
+		mState = TERMINATE;
+	}
+	mThread.Wait();
+}
+
+FileManager::AnalyserThread::AnalyserThread(wxMessageQueue<FileEvent> * msgQueue, 
+	FileManager * fMan, State * state, wxCriticalSection * stateCS, PlayerFrame * frame)
+	 : wxThread(wxTHREAD_JOINABLE),
+	 mQueue(msgQueue), mFManager(fMan), mState(state), mStateCS(stateCS),
+	mHandlerFrame(frame)
+{
+}
+
+wxThread::ExitCode FileManager::AnalyserThread::Entry()
+{
+	FileEvent ev;
+	File * file;
+	while (!TestDestroy() || *mState != TERMINATE)
+	{
+		if (mQueue->Receive(ev) != wxMSGQUEUE_NO_ERROR)
+			break;
+		if (ev.mType == "done")	//this is signal that there is no files left
+		{
+			Signal(DONE);
+			break;
+		}
+		assert(ev.mInd != -1);
+		try
+		{
+			if (ev.mType == "Music")
+				file = new MusicFile(ev.mPath);
+			else if (ev.mType == "Video")
+				file = new VideoFile(ev.mPath);
+			else //TODO: create other file types
+				continue;
+
+		}
+		catch (MyException & exc)
+		{
+			//if failed to initialize object don't put it in the list
+			if (exc.type == MyException::NOT_FATAL)
+				continue;
+			else
+				throw;
+		}
+
+		//test again, cause creating mediafile can take time
+		if (TestDestroy() || *mState == TERMINATE)
+		{
+			wxDELETE(file);
+			break;
+		}
+		wxCriticalSectionLocker l(mFManager->mFilesCS);
+		mFManager->mFiles.push_back(file);
+		mFManager->mLibs[ev.mInd].AddFile(mFManager->mFiles.back());
+		wxThreadEvent * ev = new wxThreadEvent(wxEVT_THREAD, EVT_SEARCHER_UPDATE);
+		ev->SetString("all");
+		ev->SetPayload<const File*>(file);
+		if (mHandlerFrame != nullptr)
+			wxQueueEvent(mHandlerFrame, ev);
+		file = nullptr;
+	}
+	return (wxThread::ExitCode)0; // success
+}
+
+void FileManager::SearcherThread::SignalAndWait()
+{
+	FileEvent ev("done", "", -1);
+	mQueue.Post(ev);
+	while (1)
+	{
+		Sleep(10);
+		if (mState == DONE)
+			break;
+		else if (TestDestroy())
+		{
+			StopAnalyserThread();
+			break;
+		}
+	}
 }

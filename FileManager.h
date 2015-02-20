@@ -9,7 +9,7 @@
 #include "wx/filename.h"
 #include "wx/dir.h"
 #include "File.h"
-
+#include "wx/msgqueue.h"
 
 class Playlist
 {
@@ -177,6 +177,45 @@ private:
 	int FindLib(const wxString & name) const;
 	PlayerFrame * mHandlerFrame;
 
+	class SearcherThread;
+	enum State //for communicating of threads
+	{
+		WORKING,
+		DONE,
+		TERMINATE
+	};
+	struct FileEvent
+	{
+		wxString mType;
+		wxString mPath;
+		int mInd; //index in file manager
+		FileEvent(wxString type, wxString path, int ind) : mType(type), mPath(path),
+			mInd(ind) {}
+		FileEvent() : mInd(-1) {}
+		FileEvent(const FileEvent & ev) : mType(ev.mType), mPath(ev.mPath), 
+			mInd(ev.mInd) {}
+	};
+	class AnalyserThread : public wxThread
+	{
+	private:
+		wxMessageQueue<FileEvent> * mQueue; //holds paths waiting for analysing
+		FileManager * mFManager;
+		PlayerFrame * mHandlerFrame;
+		wxCriticalSection * mStateCS;
+		State * mState;
+		virtual ExitCode Entry();
+		void Signal(State st)
+		{
+			wxCriticalSectionLocker enter(*mStateCS);
+			*mState = st;
+		}
+	public:
+		AnalyserThread(wxMessageQueue<FileEvent> * msgQueue,
+			FileManager * fMan, State * state, wxCriticalSection* stateCS, PlayerFrame * frame);
+		AnalyserThread(const AnalyserThread & a) = delete;
+		~AnalyserThread() {}
+	};
+
 	class SearcherThread : public wxThread, public wxDirTraverser
 	{
 	private:
@@ -184,14 +223,22 @@ private:
 		wxDir mDir;
 		PlayerFrame * mHandlerFrame;		
 		virtual ExitCode Entry();
-		int mSearchStage;
 		bool mStopped;
+		wxMessageQueue<FileEvent> mQueue;
+		SearcherThread * mSearcherThread;
+		AnalyserThread mThread;
+		wxCriticalSection mThreadCS;
+		wxCriticalSection mStateCS;
+		State mState;
+		void SignalAndWait();
+		void StartAnalyserThread();
+		void StopAnalyserThread();
 	public:
 		SearcherThread(FileManager * fMan, PlayerFrame *handler);
+		SearcherThread(const SearcherThread & t) = delete;
 		~SearcherThread();
 		virtual wxDirTraverseResult OnFile(const wxString& filename);
 		virtual wxDirTraverseResult OnDir(const wxString& dirname);
-
 	};
 	SearcherThread * mpThread;
 	wxCriticalSection mThreadCS;

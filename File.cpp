@@ -22,7 +22,7 @@ File::FileInfo VideoFile::mVidInfo = FileInfo("Video", videoCols, 4,
 
 void File::CollectInfo()
 {
-	mInfo.mColContents[0] = GetName();
+	mColContents[0] = GetName();
 }
 MediaFile::MediaFile() : File()
 {
@@ -37,15 +37,13 @@ MediaFile::MediaFile(const wxFileName & wxfilename) : File(wxfilename)
 
 MediaFile::MediaFile(const wxString & filename) : File(filename) 
 {
-	
 	mMInfoHandle.Option(L"ParseSpeed", L"0");
 }
 
 void MediaFile::StoreTitleAndTime()
 {
 	assert(mMInfoHandle.IsReady());
-	FileInfo & info = GetFileInfo();
-	info.mColContents[0] = mMInfoHandle.Get(Stream_General,
+	mColContents[0] = mMInfoHandle.Get(Stream_General,
 			0, L"Title").c_str();
 	wxString timeStr = mMInfoHandle.Get(Stream_General,
 			0, L"Duration").c_str();
@@ -54,7 +52,7 @@ void MediaFile::StoreTitleAndTime()
 	int seconds = (mSecs / 1000);
 	int secs = seconds % 60;
 	int minutes = (seconds - secs) / 60;
-	info.mColContents[1] = FormatTime(minutes, secs);
+	mColContents[1] = FormatTime(minutes, secs);
 }
 
 void MediaFile::CollectInfo()
@@ -71,7 +69,6 @@ void MediaFile::CollectInfo()
 
 void MusicFile::CollectInfo()
 {
-	FileInfo & i = GetFileInfo();
 	wxString path = GetFullPath();
 	wxCriticalSectionLocker locker(mMInfoCS);
 	wxCriticalSectionLocker dLocker(mCS);
@@ -80,11 +77,11 @@ void MusicFile::CollectInfo()
 		throw MyException("MusicFile::CollectInfo(): failed to initialise tagfile", MyException::NOT_FATAL);
 
 	StoreTitleAndTime();
-	i.mColContents[2] = mMInfoHandle.Get(Stream_General, 
+	mColContents[2] = mMInfoHandle.Get(Stream_General, 
 			0, L"Performer");
-	i.mColContents[3] =  mMInfoHandle.Get(Stream_General, 
+	mColContents[3] =  mMInfoHandle.Get(Stream_General, 
 			0, L"Album");
-	i.mColContents[4] = mMInfoHandle.Get(Stream_General, 
+	mColContents[4] = mMInfoHandle.Get(Stream_General, 
 			0, L"Genre");
 	mMInfoHandle.Close();
 }
@@ -96,20 +93,19 @@ File::~File()
 wxString MediaFile::GetTitle() const
 {
 	wxCriticalSectionLocker locker(mCS);
-	FileInfo & info = GetFileInfo();
-	return info.mColContents[0];
+	return mColContents[0];
 }
 
 wxFileOffset MediaFile::GetLength() const
 {
 	wxCriticalSectionLocker locker(mCS);
 	FileInfo & i = GetFileInfo();
-	if (i.mColContents[1].size() <= 0)
+	if (mColContents[1].size() <= 0)
 		return 0;
 	long min;
-	i.mColContents[1].ToLong(&min);
+	mColContents[1].ToLong(&min);
 	long seconds; 
-	i.mColContents[1].Mid(i.mColContents[1].find(':') + 1)
+	mColContents[1].Mid(mColContents[1].find(':') + 1)
 		.ToLong(&seconds);
 	//converting to miliseconds
 	return (min * 60 + seconds) * 1000;
@@ -128,13 +124,13 @@ void VideoFile::CollectInfo()
 	
 	StoreTitleAndTime();
 	wxString str;
-	i.mColContents[2] = mMInfoHandle.Get(Stream_Video,
+	mColContents[2] = mMInfoHandle.Get(Stream_Video,
 			0, L"Format").c_str();
 	str = mMInfoHandle.Get(Stream_Video,
 		0, L"Width").c_str();	
 	wxString height = mMInfoHandle.Get(Stream_Video,
 			0, L"Height").c_str();
 	str.Printf("%s x %s", str, height);
-	i.mColContents[3] = str;
+	mColContents[3] = str;
 	mMInfoHandle.Close();
 }

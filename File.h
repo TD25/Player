@@ -25,18 +25,13 @@ protected:
 		const wxString * mColumns;
 		const int mColCount;
 		const int * mColSizes;
-		wxVector<wxString> mColContents;
 		const wxString mType;
-		FileInfo(const wxString & type, const wxString * columns, const int colCount, 
+		FileInfo(const wxString & type, const wxString * columns, const int colCount,
 			const int * colSizes = nullptr) :
-			mType(type), mColumns(columns), mColCount(colCount), mColSizes(colSizes), 
-			mColContents(colCount) {}
-		FileInfo(const wxString type, const wxString * columns, const int colCount, 
-			const wxVector<wxString> & contents, const int * colSizes = nullptr ) :
-			mType(type), mColumns(columns), mColCount(colCount), mColSizes(colSizes), 
-			mColContents(contents) {}
+			mType(type), mColumns(columns), mColCount(colCount), mColSizes(colSizes) {}
 	};
 	static FileInfo mInfo; //derived classes should declare their own 
+	wxVector<wxString> mColContents;
 	virtual FileInfo & GetFileInfo() const = 0 //and implement this function
 	{
 		return mInfo;
@@ -45,10 +40,12 @@ public:
 	File() : wxFileName() {}
 	File(const wxString & filename) : wxFileName(filename) 
 	{
+		mColContents.resize(mInfo.mColCount);
 		CollectInfo();
 	}
 	File(const wxFileName & wxfilename) : wxFileName(wxfilename) 
 	{
+		mColContents.resize(mInfo.mColCount);
 		CollectInfo();
 	}
 	int GetColCount() const
@@ -57,12 +54,11 @@ public:
 	}
 	virtual wxString GetColContent(const int & colNo) const
 	{
-		FileInfo & info = GetFileInfo();
-		if (colNo >= info.mColCount)
+		if (colNo >= mColContents.size())
 			throw MyException("Too big colNo in File::GetColContent()",
 					MyException::FATAL_ERROR);
 		wxCriticalSectionLocker locker(mCS);
-		return info.mColContents[colNo];
+		return mColContents[colNo];
 	}
 	virtual wxVector<wxString> GetColNames() const
 	{
@@ -113,9 +109,9 @@ public:
 	{
 		FileInfo & i = GetFileInfo();
 		wxCriticalSectionLocker locker(mCS);
-		if (i.mColContents[1].size() <= 0)
+		if (mColContents[1].size() <= 0)
 			return wxString("0.0");
-		return i.mColContents[1];	
+		return mColContents[1];	
 	}
 	wxFileOffset GetLength()const; //in miliseconds
 	virtual wxString GetTitle() const;
@@ -135,17 +131,19 @@ public:
 	MusicFile() : MediaFile() {}
 	MusicFile(const wxString & filename) : MediaFile(filename)
 	{
+		mColContents.resize(GetColCount());
 		CollectInfo();
 	}
 	MusicFile(const wxFileName & wxfilename) : MediaFile(wxfilename)
 	{
+		mColContents.resize(GetColCount());
 		CollectInfo();
 	}
 	wxString GetArtist() const
 	{
 		FileInfo & i = GetFileInfo();
 		wxCriticalSectionLocker locker(mCS);
-		return i.mColContents[2];
+		return mColContents[2];
 	}
 	virtual ~MusicFile() {}
 };
@@ -164,10 +162,12 @@ public:
 	VideoFile() {}
 	VideoFile(const wxString & filename) : MediaFile(filename) 
 	{
+		mColContents.resize(GetColCount());
 		CollectInfo();
 	}
 	VideoFile(const wxFileName & wxfilename) : MediaFile(wxfilename) 
 	{
+		mColContents.resize(GetColCount());
 		CollectInfo();
 	}
 	wxString GetArtist() const

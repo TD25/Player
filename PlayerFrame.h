@@ -38,6 +38,7 @@ enum
 	TIMER_TIME,
 	EVT_SEARCHER_UPDATE,
 	EVT_SEARCHER_COMPLETE,
+	EVT_SEARCHER_UPDATING,
 	CTRL_LIB_SELECT_BUTTON //KEEP THIS LAST
 };
 
@@ -60,6 +61,10 @@ public:
 		wxLogStatus(this, "Search complete");
 		mFileMenu->Enable(SEARCH, true);
 		mFileMenu->Enable(STOP_SEARCH, false);
+	}
+	void OnThreadUpdating(wxThreadEvent & ev)
+	{
+		wxLogStatus(this, "Updating list");
 	}
 	void OnClose(wxCloseEvent &);
 	void OnVolButton(wxCommandEvent& ev);

@@ -10,8 +10,8 @@ PlayerFrame::PlayerFrame(const wxString& title, wxPoint &pos,
 		wxSize &size, PlayerApp * pApp)
        : wxFrame(NULL, wxID_ANY, title, pos, size), mApp(pApp), 
        mActiveLib(0), mDontStoreSelection(false), mSliderTimer(this),
-	   mCurrItemId(-1), mSecondsPlaying(0), 
-	   mActivePlaylist(0), mCurrItemInList(-1)
+	   mCurrItemId(-1), mSecondsPlaying(-1), 
+	   mActivePlaylist(0)
 {
     // set the frame icon
 //    SetIcon(wxICON(sample));

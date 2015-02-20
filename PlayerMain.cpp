@@ -109,7 +109,12 @@ public:
 	}
 	void Seek(double part)
 	{
-//		bool playing = (mMediaCtrl->GetState() == wxMEDIASTATE_PLAYING);
+		bool playing = (mMediaCtrl->GetState() == wxMEDIASTATE_PLAYING);
+		if (!playing)
+		{
+			mFrame->mSlider->SetValue(0);
+			return;
+		}
 		const MediaFile * medFile = dynamic_cast<const MediaFile*>(mPlayedFile);
 		if (medFile == nullptr)
 			return;
@@ -120,6 +125,8 @@ public:
 		if (length <= off)
 			off = length - 5;	
 		mMediaCtrl->Seek(off);
+		off = mMediaCtrl->Tell();
+		mFrame->mSecondsPlaying = off / 1000;
 	}
 	wxVector<long> FindFileIds(const wxString & libName, 
 			const wxString & plName, const wxString & str)
@@ -165,6 +172,7 @@ wxBEGIN_EVENT_TABLE(PlayerFrame, wxFrame)
 	EVT_MENU(STOP_SEARCH, PlayerFrame::OnStopSearch)
    	EVT_THREAD(EVT_SEARCHER_UPDATE, PlayerFrame::OnNewItem)
 	EVT_THREAD(EVT_SEARCHER_COMPLETE, PlayerFrame::OnSearchCompletion)
+	EVT_THREAD(EVT_SEARCHER_UPDATING, PlayerFrame::OnThreadUpdating)
 	EVT_BUTTON(CTRL_VOL_BUTTON, PlayerFrame::OnVolButton)
 	EVT_MEDIA_LOADED(MEDIA_CTRL, PlayerFrame::OnMediaLoaded)
 	EVT_MEDIA_STOP(MEDIA_CTRL, PlayerFrame::OnMediaStop)
@@ -342,6 +350,7 @@ void PlayerApp::MediaLoaded()
 		mSecondTimer->Stop();
 	}
 	int d = length / SLIDER_MAX_VAL;
+	mFrame->mSecondsPlaying = 0;
 	if (length < 2000)
 		mSliderTimer->StartOnce(length / SLIDER_MAX_VAL);
 	else
@@ -480,7 +489,7 @@ wxFileOffset PlayerApp::Tell()
 
 void PlayerFrame::OnSecondTimer(wxTimerEvent& ev)
 {
-	static int fails = 0;
+	/*static int fails = 0;
 	wxFileOffset off;
 	try
 	{
@@ -498,6 +507,12 @@ void PlayerFrame::OnSecondTimer(wxTimerEvent& ev)
 	int seconds = off / 1000;
 	int secondsPl = seconds % 60;
 	int minutesPl = (seconds-secondsPl) / 60;
+	wxString str = FormatTime(minutesPl, secondsPl);
+	str.Printf(wxT("%s/%s"), str, mCurrLengthStr)*/;
+	assert(mSecondsPlaying > -1);
+	mSecondsPlaying++;
+	int secondsPl = mSecondsPlaying % 60;
+	int minutesPl = (mSecondsPlaying-secondsPl) / 60;
 	wxString str = FormatTime(minutesPl, secondsPl);
 	str.Printf(wxT("%s/%s"), str, mCurrLengthStr);
 	mTimePanel->ChangeText(str);
