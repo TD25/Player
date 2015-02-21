@@ -32,10 +32,7 @@ protected:
 	};
 	static FileInfo mInfo; //derived classes should declare their own 
 	wxVector<wxString> mColContents;
-	virtual FileInfo & GetFileInfo() const = 0 //and implement this function
-	{
-		return mInfo;
-	}
+	virtual FileInfo & GetFileInfo() const = 0; //and implement this function
 public:
 	File() : wxFileName() {}
 	File(const wxString & filename) : wxFileName(filename) 
@@ -95,10 +92,7 @@ protected:
 	static MediaInfo mMInfoHandle;
 	mutable wxCriticalSection mMInfoCS;
 	static FileInfo mMedInfo;
-	virtual FileInfo & GetFileInfo() const = 0
-	{
-		return mMedInfo;
-	}
+	virtual FileInfo & GetFileInfo() const = 0;
 	virtual void CollectInfo() = 0;
 	void StoreTitleAndTime(); //mMInfoHandle has to have opened file
 public:

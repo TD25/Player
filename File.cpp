@@ -20,6 +20,16 @@ File::FileInfo MusicFile::mMusicInfo = FileInfo("Music", musicCols, 5,
 File::FileInfo VideoFile::mVidInfo = FileInfo("Video", videoCols, 4,
 	videoColSizes);
 
+File::FileInfo &  File::GetFileInfo() const
+{
+	return mInfo;
+}
+
+File::FileInfo & MediaFile::GetFileInfo() const
+{
+	return mMedInfo;
+}
+
 void File::CollectInfo()
 {
 	mColContents[0] = GetName();
@@ -42,7 +52,9 @@ MediaFile::MediaFile(const wxString & filename) : File(filename)
 
 void MediaFile::StoreTitleAndTime()
 {
+#ifdef MEDIAINFO_DLL
 	assert(mMInfoHandle.IsReady());
+#endif //MEDIAINFO_DLL
 	mColContents[0] = mMInfoHandle.Get(Stream_General,
 			0, L"Title").c_str();
 	wxString timeStr = mMInfoHandle.Get(Stream_General,

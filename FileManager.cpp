@@ -350,7 +350,8 @@ void FileManager::SearcherThread::StopAnalyserThread()
 		wxCriticalSectionLocker enter(mStateCS);
 		mState = TERMINATE;
 	}
-	mThread.Wait();
+	mQueue.Post(FileEvent()); //wake up thread (might be waiting for event)
+	mThread.Wait(); //now wait for thread quiting
 }
 
 FileManager::AnalyserThread::AnalyserThread(wxMessageQueue<FileEvent> * msgQueue, 
@@ -368,6 +369,8 @@ wxThread::ExitCode FileManager::AnalyserThread::Entry()
 	while (!TestDestroy() || *mState != TERMINATE)
 	{
 		if (mQueue->Receive(ev) != wxMSGQUEUE_NO_ERROR)
+			break;
+		if (TestDestroy() || *mState == TERMINATE) //termination can happen while waiting for event
 			break;
 		if (ev.mType == "done")	//this is signal that there is no files left
 		{
